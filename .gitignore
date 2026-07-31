@@ -1,0 +1,17 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+dados/**/*.db
+dados/**/*.db.removido
+dados/storage/
+servidor.log
+servidor.err
+_teste_*.py
+*.log
+.cursor/
+.nicegui/
+.DS_Store
+Thumbs.db
+*.sqlite3
