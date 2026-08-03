@@ -9,6 +9,12 @@ ERP white-label + site público para lojas de veículos (NiceGUI + SQLAlchemy).
 - SQLAlchemy + PostgreSQL (Supabase) ou SQLite local
 - Passlib (senhas)
 
+## Deploy (Easypanel)
+
+Guia completo: **[DEPLOY-EASYPANEL.md](DEPLOY-EASYPANEL.md)** — GitHub + Dockerfile + Supabase + domínios.
+
+Resumo: App no Easypanel, source GitHub `goulartfelipe618-beep/sigma-sistema`, build **Dockerfile**, porta **8080**, volume em `/app/dados`.
+
 ## Setup no servidor
 
 ```bash

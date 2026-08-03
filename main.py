@@ -58,6 +58,11 @@ init_db()
 CSS_SITE = "/static/estilo.css?v=22"
 
 
+@app.get("/health")
+def health_check() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 def ativar_loja(slug: str) -> bool:
     conta = obter_conta_por_slug(slug)
     if conta is None or not conta.ativa:
@@ -490,11 +495,13 @@ def rota_erp_spa(resto: str = "") -> None:
 
 
 if __name__ in {"__main__", "__mp_main__"}:
+    port = int(os.getenv("PORT", "8080"))
     ui.run(
         title="Plataforma White Label — Gestão Veículos",
         favicon="🚗",
         reload=False,
-        port=8080,
+        host="0.0.0.0",
+        port=port,
         storage_secret=os.getenv(
             "SECRET_KEY", "sigma-erp-secret-change-in-production",
         ),
