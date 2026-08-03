@@ -365,8 +365,9 @@ def barra_lateral_site(avaliacao_spa=None) -> None:
 
 
 def encerrar_pagina_site(avaliacao_spa=None) -> None:
-    barra_lateral_site(avaliacao_spa)
     rodape()
+    # Fora do fluxo do layout (evita stretch virar “faixa” na tela)
+    barra_lateral_site(avaliacao_spa)
 
 
 def rodape() -> None:

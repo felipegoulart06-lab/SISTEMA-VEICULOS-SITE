@@ -9,12 +9,13 @@ from nicegui import app, ui
 
 from loja.componentes import (
     banner,
+    barra_lateral_site,
     barra_social,
     cabecalho,
     card_destaque,
     card_veiculo,
-    encerrar_pagina_site,
     injetar_tema,
+    rodape,
     secao_sobre,
     sidebar_marcas,
 )
@@ -34,8 +35,84 @@ from loja.repositorio import (
 )
 from loja.tenant_ctx import ligar_tenant, resolver_link_site, site_url
 
-CSS_SITE = "/static/estilo.css?v=19"
+CSS_SITE = "/static/estilo.css?v=22"
 TTL_PAINEL = 1800.0
+
+# NiceGUI 3.x usa CSS layers — override precisa estar em @layer overrides
+CSS_LAYOUT_FIX = """
+<style>
+@layer overrides {
+  .nicegui-content,
+  .nicegui-column,
+  .nicegui-sub-pages {
+    align-items: stretch !important;
+    gap: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+  }
+  .site-root,
+  .nicegui-content > .site-root,
+  .barra-social,
+  .cabecalho-principal,
+  .rodape,
+  .site-spa-host,
+  .site-spa-painel {
+    width: 100% !important;
+    max-width: none !important;
+    align-self: stretch !important;
+    box-sizing: border-box !important;
+  }
+  .site-spa-painel > * {
+    align-self: center !important;
+    box-sizing: border-box !important;
+  }
+  .corpo-site,
+  .banner,
+  .secao-sobre,
+  .secao-depoimentos,
+  .barra-social .conteudo,
+  .cabecalho-principal .conteudo,
+  .rodape .conteudo,
+  .corpo-estoque-wrap,
+  .corpo-institucional-wrap,
+  .corpo-financiamento-wrap,
+  .corpo-avaliacao-wrap,
+  .corpo-detalhe-wrap {
+    width: 100% !important;
+    max-width: 1200px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    box-sizing: border-box !important;
+  }
+  /* Botões flutuantes NÃO podem herdar stretch/width:100% */
+  .site-redes-fixas,
+  .site-btn-avaliacao,
+  .site-btn-atendimento,
+  .site-chat-panel,
+  .site-root > .site-redes-fixas,
+  .site-root > .site-btn-avaliacao,
+  .site-root > .q-btn.site-btn-atendimento {
+    width: auto !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    height: auto !important;
+    align-self: auto !important;
+    flex: 0 0 auto !important;
+  }
+  .site-btn-atendimento {
+    width: 48px !important;
+    max-width: 48px !important;
+    height: 48px !important;
+  }
+  .site-btn-avaliacao {
+    width: auto !important;
+    max-width: max-content !important;
+    white-space: nowrap !important;
+  }
+}
+</style>
+"""
 
 ROTAS_SITE = {
     "/",
@@ -115,6 +192,7 @@ def _head_site(titulo: str, descricao: str = "") -> None:
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
     )
     ui.add_head_html(f'<link rel="stylesheet" href="{CSS_SITE}">')
+    ui.add_head_html(CSS_LAYOUT_FIX)
     ui.add_head_html(
         '<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">'
     )
@@ -373,19 +451,33 @@ def montar_site_spa(
 
     ui.context.client.site_ir = ir  # type: ignore[attr-defined]
 
-    barra_social()
-    cabecalho(buscar, navegar_spa=ir, nav_refs=nav_refs, rota_ativa=estado["rota"])
+    root = ui.element("div").classes("site-root")
+    root.style(
+        "width:100%;max-width:100%;display:flex;flex-direction:column;"
+        "align-items:stretch;margin:0;padding:0;box-sizing:border-box"
+    )
+    with root:
+        barra_social()
+        cabecalho(
+            buscar,
+            navegar_spa=ir,
+            nav_refs=nav_refs,
+            rota_ativa=estado["rota"],
+        )
 
-    host_ref["el"] = ui.element("div").classes("site-spa-host")
-    with host_ref["el"]:
-        carregando_ref["el"] = ui.element("div").classes("site-spa-carregando")
-        with carregando_ref["el"]:
-            ui.html('<p class="site-spa-carregando-txt">Carregando…</p>')
-        carregando_ref["el"].set_visibility(False)
+        host_ref["el"] = ui.element("div").classes("site-spa-host")
+        with host_ref["el"]:
+            carregando_ref["el"] = ui.element("div").classes("site-spa-carregando")
+            with carregando_ref["el"]:
+                ui.html('<p class="site-spa-carregando-txt">Carregando…</p>')
+            carregando_ref["el"].set_visibility(False)
 
-    _mostrar(estado["rota"], forcar=True)
-    _marcar_ativo(estado["rota"])
-    encerrar_pagina_site(avaliacao_spa=ir)
+        _mostrar(estado["rota"], forcar=True)
+        _marcar_ativo(estado["rota"])
+        rodape()
+
+    # Flutuantes fora do root — evita stretch virar faixa na tela
+    barra_lateral_site(avaliacao_spa=ir)
 
     vistos: set[str] = set()
     for _, href in MENU:

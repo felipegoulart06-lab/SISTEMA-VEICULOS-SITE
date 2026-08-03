@@ -10,6 +10,7 @@ from loja.plataforma import (
     precisa_trocar_senha,
     trocar_senha_tenant,
 )
+from loja.roteamento_host import erp_admin_url, erp_login_url, erp_trocar_senha_url
 from loja.tenant_ctx import ligar_tenant, limpar_tenant
 
 
@@ -39,6 +40,8 @@ def fazer_login(email: str, senha: str) -> bool:
     conta = autenticar_conta(email, senha)
     if not conta:
         return False
+    for chave in ("master_id", "master_nome", "master_email", "impersonando"):
+        app.storage.user.pop(chave, None)
     app.storage.user["usuario_id"] = conta.id
     app.storage.user["usuario_nome"] = conta.nome
     app.storage.user["usuario_email"] = conta.email
@@ -71,8 +74,12 @@ def exigir_login() -> bool:
     """Garante sessão da empresa. Retorna False se redirecionou."""
     import time
 
+    if master_logado() and not impersonando():
+        ui.navigate.to("/master")
+        return False
+
     if not logado():
-        ui.navigate.to("/admin/login")
+        ui.navigate.to(erp_login_url())
         return False
 
     agora = time.time()
@@ -82,34 +89,42 @@ def exigir_login() -> bool:
     if slug and agora - ultimo < 90 and app.storage.user.get("_acesso_ok"):
         ligar_tenant(slug)
         if deve_trocar_senha():
-            ui.navigate.to("/admin/trocar-senha")
+            ui.navigate.to(erp_trocar_senha_url())
             return False
         return True
 
     conta = obter_conta(app.storage.user.get("conta_id") or 0)
     if conta is None:
         fazer_logout()
-        ui.navigate.to("/admin/login")
+        ui.navigate.to(erp_login_url())
         return False
     liberado, motivo = empresa_pode_acessar(conta)
     if not liberado and not impersonando():
         fazer_logout()
         ui.notify(motivo, type="negative", timeout=6000)
-        ui.navigate.to("/admin/login")
+        ui.navigate.to(erp_login_url())
         return False
     ligar_tenant(conta.slug)
     app.storage.user["_acesso_check_em"] = agora
     app.storage.user["_acesso_ok"] = True
     if deve_trocar_senha():
-        ui.navigate.to("/admin/trocar-senha")
+        ui.navigate.to(erp_trocar_senha_url())
         return False
     return True
 
 
 def redirecionar_se_logado() -> None:
+    if master_logado():
+        ui.navigate.to("/master")
+        return
     if logado():
         ligar_tenant(app.storage.user.get("conta_slug"))
-        ui.navigate.to("/admin")
+        ui.navigate.to(erp_admin_url())
+
+
+def redirecionar_se_master_logado() -> None:
+    if master_logado():
+        ui.navigate.to("/master")
 
 
 def master_logado() -> bool:
@@ -138,6 +153,8 @@ def fazer_logout_master() -> None:
 
 
 def exigir_master() -> bool:
+    if logado() and not master_logado():
+        fazer_logout()
     if not master_logado():
         ui.navigate.to("/master/login")
         return False

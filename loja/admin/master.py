@@ -8,36 +8,43 @@ from datetime import datetime, timedelta
 from nicegui import ui
 
 from loja.auth import (
-    entrar_como_conta,
     exigir_master,
     fazer_login_master,
     fazer_logout_master,
     master_logado,
     master_nome,
 )
+from loja.provisionamento import gerar_token_longo
 from loja.tempo import naive
 from loja.plataforma import (
+    DIAS_PARA_EXCLUSAO,
     LOG_LABEL,
     STATUS_CONTA,
+    STATUS_CRIACAO,
     STATUS_LABEL,
     TIPOS_LOG,
     alterar_status_conta,
     atualizar_conta,
     atualizar_dominios,
     criar_conta,
+    data_liberacao_exclusao,
+    dias_restantes_exclusao,
     estatisticas_plataforma,
     excluir_conta,
     excluir_plano,
+    gerar_dominios_empresa,
     listar_contas,
     listar_logs,
     listar_planos,
     obter_conta,
     obter_config_plataforma,
     obter_plano,
+    pode_excluir_conta,
     regenerar_token,
     renovar_licenca,
     salvar_config_plataforma,
     salvar_plano,
+    slugify,
     ultimas_contas,
 )
 
@@ -104,7 +111,7 @@ def _css_master() -> None:
         '<link rel="stylesheet" href="https://fonts.googleapis.com/icon'
         '?family=Material+Icons">'
     )
-    ui.add_head_html('<link rel="stylesheet" href="/static/admin.css?v=22">')
+    ui.add_head_html('<link rel="stylesheet" href="/static/admin.css?v=27">')
     ui.add_head_html(
         "<style>:root { --erp-accent: #1e3a5f; --erp-accent-hover: #16304f; "
         "--erp-accent-soft: rgba(30,58,95,0.12); }</style>"
@@ -199,12 +206,17 @@ def layout_master(pagina_atual: str, conteudo_fn) -> None:
 
 
 def pagina_master_login() -> None:
+    """Login exclusivo do Administrador Master."""
     _css_master()
     if master_logado():
         ui.navigate.to("/master")
         return
 
-    with ui.element("div").classes("erp-login-page"):
+    ui.add_head_html(
+        "<style>:root { --erp-accent: #1e3a5f; --erp-accent-hover: #16304f; }</style>"
+    )
+
+    with ui.element("div").classes("erp-login-page erp-login-master"):
         with ui.element("div").classes("erp-login-brand"):
             ui.html('<div class="erp-login-brand-logo">PLATAFORMA</div>')
             ui.html('<p class="erp-login-brand-loja">Administrador Master</p>')
@@ -215,20 +227,27 @@ def pagina_master_login() -> None:
                 "<li>Domínios e logs da plataforma</li>"
                 "</ul>"
             )
+            ui.html(
+                '<p class="erp-login-brand-copy">'
+                "Acesso restrito — não use esta tela para entrar nas lojas"
+                "</p>"
+            )
 
         with ui.element("div").classes("erp-login-form-side"):
             with ui.element("div").classes("erp-login-card"):
                 ui.html(
-                    '<div class="erp-login-card-topo"><h1>Master</h1>'
+                    '<div class="erp-login-card-topo"><h1>Login Master</h1>'
                     "<p>Acesso exclusivo do administrador da plataforma</p>"
                     "</div>"
                 )
-                email = ui.input("E-mail").props(
-                    "outlined dense hide-bottom-space"
+                email = ui.input("E-mail Master").props(
+                    "outlined dense hide-bottom-space autofocus"
                 ).classes("erp-login-field")
-                senha = ui.input("Senha", password=True).props(
-                    "outlined dense hide-bottom-space"
-                ).classes("erp-login-field")
+                senha = ui.input(
+                    "Senha",
+                    password=True,
+                    password_toggle_button=True,
+                ).props("outlined dense hide-bottom-space").classes("erp-login-field")
 
                 def entrar() -> None:
                     if fazer_login_master(email.value or "", senha.value or ""):
@@ -293,17 +312,6 @@ def pagina_master_dashboard() -> None:
                     f'<div class="mst-sub">{c.subdominio or c.slug} · criada em '
                     f"{_data(c.criado_em)}</div></div>"
                 )
-                ui.button(
-                    "Entrar no ERP",
-                    on_click=lambda cid=c.id: _entrar_na_loja(cid),
-                ).props("flat dense no-caps").classes("mst-btn-mini")
-
-
-def _entrar_na_loja(conta_id: int) -> None:
-    if entrar_como_conta(conta_id):
-        ui.navigate.to("/admin")
-    else:
-        ui.notify("Não foi possível acessar esta empresa.", type="negative")
 
 
 # ------------------------------------------------------------- Empresas
@@ -344,32 +352,21 @@ def pagina_master_empresas() -> None:
                     ui.html(f"<span>{_pill_licenca(c.vencimento_em)}</span>")
                     with ui.element("span").classes("mst-acoes"):
                         ui.button(
-                            "Entrar",
-                            on_click=lambda cid=c.id: _entrar_na_loja(cid),
-                        ).props("flat dense no-caps").classes("mst-btn-mini")
-                        ui.button(
                             "Editar",
                             on_click=lambda cid=c.id: _dialog_editar(
                                 cid, lista.refresh
                             ),
                         ).props("flat dense no-caps").classes("mst-btn-mini")
                         rotulo = (
-                            "Reativar" if c.status == "suspensa" else "Suspender"
+                            "Reativar" if c.status == "suspensa" else "Desativar"
                         )
                         ui.button(
                             rotulo,
-                            on_click=lambda cid=c.id, st=c.status: _alternar(
-                                cid, st, lista.refresh
+                            on_click=lambda cid=c.id, st=c.status, n=c.nome: _confirmar_alternar(
+                                cid, st, n, lista.refresh
                             ),
                         ).props("flat dense no-caps").classes("mst-btn-mini")
-                        ui.button(
-                            "Excluir",
-                            on_click=lambda cid=c.id, n=c.nome: _dialog_excluir(
-                                cid, n, lista.refresh
-                            ),
-                        ).props("flat dense no-caps").classes(
-                            "mst-btn-mini mst-btn-perigo"
-                        )
+                        _acoes_exclusao(c, lista.refresh)
 
     with ui.element("div").classes("erp-toolbar"):
         ui.button(
@@ -379,22 +376,104 @@ def pagina_master_empresas() -> None:
     lista()
 
 
-def _alternar(conta_id: int, status_atual: str, refresh) -> None:
-    novo = "ativa" if status_atual == "suspensa" else "suspensa"
-    alterar_status_conta(conta_id, novo)
-    ui.notify(f"Empresa {STATUS_LABEL[novo].lower()}.", type="positive")
-    refresh()
+def _confirmar_alternar(
+    conta_id: int, status_atual: str, nome: str, refresh,
+) -> None:
+    desativar = status_atual != "suspensa"
+    if desativar:
+        titulo = f"Desativar a empresa {nome}?"
+        texto = (
+            "O ERP e o site ficarão bloqueados imediatamente. "
+            f"A exclusão só poderá ser feita após {DIAS_PARA_EXCLUSAO} dias."
+        )
+        rotulo_acao = "Desativar"
+        cor = "warning"
+    else:
+        titulo = f"Reativar a empresa {nome}?"
+        texto = "A empresa voltará a acessar ERP e site público."
+        rotulo_acao = "Reativar"
+        cor = "primary"
 
-
-def _dialog_excluir(conta_id: int, nome: str, refresh) -> None:
     with ui.dialog() as dlg, ui.card().classes("erp-dialog"):
-        ui.label(f"Excluir a empresa {nome}?").classes("text-weight-bold")
-        ui.label("O ERP, o site e todos os dados serão apagados.")
+        ui.label(titulo).classes("text-weight-bold")
+        ui.label(texto)
         with ui.row().classes("w-full justify-end gap-2"):
             ui.button("Cancelar", on_click=dlg.close).props("flat no-caps")
 
             def confirmar() -> None:
-                excluir_conta(conta_id)
+                dlg.close()
+                _alternar(conta_id, status_atual, refresh)
+
+            ui.button(rotulo_acao, on_click=confirmar).props(
+                f"unelevated no-caps color={cor}"
+            )
+    dlg.open()
+
+
+def _alternar(conta_id: int, status_atual: str, refresh) -> None:
+    novo = "ativa" if status_atual == "suspensa" else "suspensa"
+    alterar_status_conta(conta_id, novo)
+    if novo == "suspensa":
+        ui.notify(
+            f"Empresa desativada. Conta bloqueada. "
+            f"Exclusão liberada em {DIAS_PARA_EXCLUSAO} dias.",
+            type="warning",
+            timeout=7000,
+        )
+    else:
+        ui.notify("Empresa reativada.", type="positive")
+    refresh()
+
+
+def _acoes_exclusao(conta, refresh) -> None:
+    """Excluir só após 31 dias desativada; enquanto isso mostra a contagem."""
+    dias = dias_restantes_exclusao(conta)
+    if dias is None:
+        ui.html(
+            '<span class="mst-exclusao-bloqueada" title="'
+            f'Desative a empresa e aguarde {DIAS_PARA_EXCLUSAO} dias">'
+            "Excluir</span>"
+        )
+        return
+    if dias > 0:
+        liberacao = data_liberacao_exclusao(conta)
+        data_txt = liberacao.strftime("%d/%m/%Y") if liberacao else ""
+        ui.html(
+            f'<span class="mst-contagem-exclusao" title="Liberada em {data_txt}">'
+            f"Exclusão em <strong>{dias}</strong> dia"
+            f'{"s" if dias != 1 else ""}</span>'
+        )
+        return
+    ui.button(
+        "Excluir",
+        on_click=lambda cid=conta.id, n=conta.nome: _dialog_excluir(
+            cid, n, refresh
+        ),
+    ).props("flat dense no-caps").classes("mst-btn-mini mst-btn-perigo")
+
+
+def _dialog_excluir(conta_id: int, nome: str, refresh) -> None:
+    conta = obter_conta(conta_id)
+    if conta is None or not pode_excluir_conta(conta):
+        ui.notify(
+            "Exclusão ainda não liberada. Aguarde 31 dias após desativar.",
+            type="warning",
+        )
+        return
+    with ui.dialog() as dlg, ui.card().classes("erp-dialog"):
+        ui.label(f"Excluir a empresa {nome}?").classes("text-weight-bold")
+        ui.label(
+            "O ERP, o site e todos os dados serão apagados definitivamente."
+        )
+        with ui.row().classes("w-full justify-end gap-2"):
+            ui.button("Cancelar", on_click=dlg.close).props("flat no-caps")
+
+            def confirmar() -> None:
+                try:
+                    excluir_conta(conta_id)
+                except ValueError as exc:
+                    ui.notify(str(exc), type="warning")
+                    return
                 dlg.close()
                 ui.notify("Empresa excluída.", type="positive")
                 refresh()
@@ -405,104 +484,194 @@ def _dialog_excluir(conta_id: int, nome: str, refresh) -> None:
     dlg.open()
 
 
+def _abrir_paleta_cor(campo_cor, preview_el) -> None:
+    """Abre seletor de cor em diálogo próprio (evita bug dentro do modal principal)."""
+    inicial = (campo_cor.value or "#c0392b").strip()
+    if not inicial.startswith("#"):
+        inicial = "#c0392b"
+    estado = {"cor": inicial}
+
+    with ui.dialog() as paleta, ui.card().classes("erp-dialog mst-paleta-cor"):
+        ui.html("<h3 class='erp-dialog-titulo'>Escolher cor do tema</h3>")
+        qcolor = ui.element("q-color").props(
+            f'model-value="{inicial}" no-header no-footer'
+        )
+        qcolor.on("change", lambda e: estado.update(cor=e.args or estado["cor"]))
+
+        def aplicar() -> None:
+            campo_cor.set_value(estado["cor"])
+            preview_el.style(f"background-color: {estado['cor']}")
+            paleta.close()
+
+        with ui.row().classes("w-full justify-end gap-2 erp-dialog-botoes"):
+            ui.button("Cancelar", on_click=paleta.close).props("flat no-caps")
+            ui.button("Aplicar", on_click=aplicar).classes(
+                "erp-btn-primario"
+            ).props("unelevated no-caps")
+    paleta.open()
+
+
 def _dialog_criar(refresh) -> None:
     planos = listar_planos(apenas_ativos=True)
     opcoes = {p.id: p.nome for p in planos}
+    cfg = obter_config_plataforma()
+    dominio_base = cfg.dominio_base or "plataforma.com.br"
 
     with ui.dialog() as dlg, ui.card().classes("erp-dialog mst-dialog"):
-        ui.html("<h3>Criar empresa</h3>")
-        ui.html(
-            '<p class="erp-ajuda">Cria banco isolado, ERP vazio, site vazio, '
-            "administrador único e senha temporária.</p>"
-        )
-        nome = ui.input("Nome da empresa").classes("erp-input-full")
-        email = ui.input("E-mail do administrador").classes("erp-input-full")
-        sub = ui.input(
-            "Identificador", placeholder="minha-loja",
-        ).classes("erp-input-full")
-        plano = ui.select(
-            opcoes, label="Plano",
-            value=planos[0].id if planos else None,
-        ).classes("erp-input-full")
-        status = ui.select(
-            {s: STATUS_LABEL[s] for s in STATUS_CONTA},
-            label="Status inicial", value="teste",
-        ).classes("erp-input-full")
-        dias = ui.number("Dias de licença", value=30, format="%.0f").classes(
-            "erp-input-full"
-        )
-        site = ui.input("Domínio do site (opcional)").classes("erp-input-full")
-        erp = ui.input("Domínio do ERP (opcional)").classes("erp-input-full")
-        cor = ui.input("Cor do tema", value="#c0392b").classes("erp-input-full")
-        senha = ui.input(
-            "Senha temporária", placeholder="Deixe vazio para gerar",
-        ).classes("erp-input-full")
-
-        estado: dict = {"relatorio": None}
-
-        @ui.refreshable
-        def sucesso() -> None:
-            relatorio = estado.get("relatorio")
-            if relatorio is None:
-                return
-            linhas = "".join(
-                f'<li class="mst-etapa-{"ok" if e.ok else "erro"}">{e.titulo}'
-                + (f' <span class="mst-sub">{e.detalhe}</span>' if e.detalhe else "")
-                + "</li>"
-                for e in relatorio.etapas
-            )
+        with ui.column().classes("w-full erp-form-stack mst-form-criar"):
+            ui.html("<h3>Criar empresa</h3>")
             ui.html(
-                f'<div class="mst-sucesso"><strong>Empresa criada!</strong><br>'
-                f"Site: <a href='/loja/{estado['slug']}/' target='_blank'>"
-                f"/loja/{estado['slug']}/</a><br>"
-                f"Subdomínio: <code>{estado['subdominio']}</code><br>"
-                f"E-mail: <code>{estado['email']}</code><br>"
-                f"Senha temporária: <code>{estado['senha']}</code><br>"
-                f"<span>O administrador precisará trocar a senha no primeiro "
-                f"acesso.</span>"
-                f'<ul class="mst-etapas">{linhas}</ul></div>'
+                '<p class="erp-ajuda">Cria banco isolado, ERP vazio, site público limpo '
+                "(sem veículos nem conteúdo) e domínios exclusivos para esta empresa. "
+                "A senha temporária é obrigatória.</p>"
+            )
+            nome = ui.input("Nome da empresa").classes("erp-input-full")
+            email = ui.input("E-mail do administrador (login)").classes("erp-input-full")
+            sub = ui.input(
+                "Identificador", placeholder="minha-loja",
+            ).classes("erp-input-full")
+            plano = ui.select(
+                opcoes, label="Plano",
+                value=planos[0].id if planos else None,
+            ).classes("erp-input-full")
+            status = ui.select(
+                STATUS_CRIACAO,
+                label="Status inicial",
+                value="ativa",
+            ).classes("erp-input-full")
+            dias = ui.number("Dias de licença", value=30, format="%.0f").classes(
+                "erp-input-full"
             )
 
-        def criar() -> None:
-            if not nome.value or not email.value:
-                ui.notify("Preencha nome e e-mail.", type="warning")
-                return
-            try:
-                conta, senha_gerada, relatorio = criar_conta(
-                    nome=nome.value,
-                    email=email.value,
-                    slug=sub.value or None,
-                    token=senha.value or None,
-                    plano_id=plano.value,
-                    status=status.value,
-                    dias_licenca=int(dias.value or 30),
-                    dominio_site=site.value or "",
-                    dominio_erp=erp.value or "",
-                    tema_cor=cor.value or "#c0392b",
+            @ui.refreshable
+            def preview_dominios() -> None:
+                slug_prev = slugify(sub.value or nome.value or "minha-loja")
+                doms = gerar_dominios_empresa(slug_prev, dominio_base)
+                ui.html(
+                    '<div class="mst-dominios-preview erp-ajuda">'
+                    "<strong>Acesso configurado automaticamente</strong><br>"
+                    f"ERP (subdomínio): <code>{doms['subdominio']}</code><br>"
+                    "Site: configure o domínio próprio depois em Domínios<br>"
+                    f"Dev local site: <code>/loja/{slug_prev}/</code>"
+                    "</div>"
                 )
-            except ValueError as err:
-                ui.notify(str(err), type="negative")
-                return
-            except Exception as err:
-                ui.notify(f"Erro ao criar empresa: {err}", type="negative")
-                return
-            estado.update({
-                "relatorio": relatorio,
-                "slug": conta.slug,
-                "senha": senha_gerada,
-                "email": conta.email,
-                "subdominio": conta.subdominio,
-            })
-            ui.notify("Empresa criada!", type="positive")
-            sucesso.refresh()
-            refresh()
 
-        sucesso()
-        with ui.row().classes("w-full justify-end gap-2 mt-3"):
-            ui.button("Fechar", on_click=dlg.close).props("flat no-caps")
-            ui.button("Criar empresa", on_click=criar).classes(
-                "erp-btn-primario"
-            ).props("unelevated no-caps")
+            preview_dominios()
+            sub.on("update:model-value", lambda _: preview_dominios.refresh())
+            nome.on("update:model-value", lambda _: preview_dominios.refresh())
+
+            ui.label("Cor do tema").classes("mst-field-label")
+            with ui.row().classes("w-full items-center gap-3 mst-cor-tema-row"):
+                preview_cor = ui.element("div").classes("mst-cor-preview")
+                preview_cor.style("background-color: #c0392b")
+                cor = ui.input(
+                    value="#c0392b",
+                    placeholder="#c0392b",
+                ).classes("erp-input-full flex-grow")
+                ui.button(
+                    icon="palette",
+                    on_click=lambda: _abrir_paleta_cor(cor, preview_cor),
+                ).props("outline round dense").classes("mst-btn-paleta")
+
+                def _atualizar_preview_cor() -> None:
+                    val = (cor.value or "").strip()
+                    if len(val) == 7 and val.startswith("#"):
+                        try:
+                            int(val[1:], 16)
+                        except ValueError:
+                            return
+                        preview_cor.style(f"background-color: {val}")
+
+                cor.on("update:model-value", lambda _: _atualizar_preview_cor())
+
+            ui.label("Senha temporária *").classes("mst-field-label")
+            with ui.row().classes("w-full items-center gap-2 mst-senha-row"):
+                senha = ui.input(
+                    "Senha temporária",
+                    password=True,
+                    password_toggle_button=True,
+                    placeholder="Obrigatória — mín. 8 caracteres",
+                ).classes("erp-input-full flex-grow")
+                ui.button(
+                    "Gerar token (25)",
+                    on_click=lambda: senha.set_value(gerar_token_longo(25)),
+                ).props("outline no-caps dense").classes("mst-btn-gerar-token")
+
+            estado: dict = {"relatorio": None}
+
+            @ui.refreshable
+            def sucesso() -> None:
+                relatorio = estado.get("relatorio")
+                if relatorio is None:
+                    return
+                linhas = "".join(
+                    f'<li class="mst-etapa-{"ok" if e.ok else "erro"}">{e.titulo}'
+                    + (f' <span class="mst-sub">{e.detalhe}</span>' if e.detalhe else "")
+                    + "</li>"
+                    for e in relatorio.etapas
+                )
+                ui.html(
+                    f'<div class="mst-sucesso"><strong>Empresa criada!</strong><br>'
+                    f"ERP: acesse <code>{estado['subdominio']}</code> no navegador<br>"
+                    f"Site (dev): <a href='/loja/{estado['slug']}/' target='_blank'>"
+                    f"/loja/{estado['slug']}/</a><br>"
+                    f"Domínio do site: "
+                    f"<code>{estado['dominio_site'] or 'configurar em Domínios'}</code><br>"
+                    f"Login (e-mail): <code>{estado['email']}</code><br>"
+                    f"Senha temporária: <code>{estado['senha']}</code><br>"
+                    f"<span>O administrador precisará trocar a senha no primeiro "
+                    f"acesso.</span>"
+                    f'<ul class="mst-etapas">{linhas}</ul></div>'
+                )
+
+            def criar() -> None:
+                if not nome.value or not email.value:
+                    ui.notify("Preencha nome e e-mail.", type="warning")
+                    return
+                senha_val = (senha.value or "").strip()
+                if len(senha_val) < 8:
+                    ui.notify(
+                        "Informe a senha temporária (mínimo 8 caracteres) "
+                        "ou gere um token de 25 dígitos.",
+                        type="warning",
+                    )
+                    return
+                try:
+                    conta, senha_gerada, relatorio = criar_conta(
+                        nome=nome.value,
+                        email=email.value,
+                        slug=sub.value or None,
+                        token=senha_val,
+                        plano_id=plano.value,
+                        status=status.value,
+                        dias_licenca=int(dias.value or 30),
+                        tema_cor=cor.value or "#c0392b",
+                    )
+                except ValueError as err:
+                    ui.notify(str(err), type="negative")
+                    return
+                except Exception as err:
+                    ui.notify(f"Erro ao criar empresa: {err}", type="negative")
+                    return
+                estado.update({
+                    "relatorio": relatorio,
+                    "slug": conta.slug,
+                    "senha": senha_gerada,
+                    "email": conta.email,
+                    "subdominio": conta.subdominio,
+                    "dominio_site": conta.dominio_site,
+                    "dominio_erp": conta.dominio_erp,
+                })
+                ui.notify("Empresa criada!", type="positive")
+                sucesso.refresh()
+                refresh()
+
+            sucesso()
+            with ui.row().classes("w-full justify-end gap-2 erp-dialog-botoes"):
+                ui.button("Fechar", on_click=dlg.close).props("flat no-caps")
+                ui.button("Criar empresa", on_click=criar).classes(
+                    "erp-btn-primario"
+                ).props("unelevated no-caps")
     dlg.open()
 
 
@@ -714,9 +883,9 @@ def pagina_master_dominios() -> None:
         "</div></div>"
     )
     ui.html(
-        '<div class="mst-nota">O apontamento de DNS e o SSL são feitos '
-        "manualmente no seu provedor. Aqui a plataforma apenas registra qual "
-        "domínio pertence a cada empresa.</div>"
+        '<div class="mst-nota">O ERP de cada loja abre no <strong>subdomínio</strong> '
+        "cadastrado aqui. O site público fica no <strong>domínio próprio</strong> "
+        "da empresa. DNS e SSL são configurados no provedor.</div>"
     )
 
     @ui.refreshable
@@ -728,16 +897,14 @@ def pagina_master_dominios() -> None:
         with ui.element("div").classes("mst-tabela-wrap"):
             ui.html(
                 '<div class="mst-tabela-head mst-head-dom">'
-                "<span>Empresa</span><span>Subdomínio</span>"
-                "<span>Domínio do site</span><span>Domínio do ERP</span>"
-                "<span>Ações</span></div>"
+                "<span>Empresa</span><span>Subdomínio (ERP)</span>"
+                "<span>Domínio do site</span><span>Ações</span></div>"
             )
             for c in contas:
                 with ui.element("div").classes("mst-tabela-row mst-head-dom"):
                     ui.html(f"<span><strong>{c.nome}</strong></span>")
                     ui.html(f"<span>{c.subdominio or '—'}</span>")
                     ui.html(f"<span>{c.dominio_site or '—'}</span>")
-                    ui.html(f"<span>{c.dominio_erp or '—'}</span>")
                     with ui.element("span").classes("mst-acoes"):
                         ui.button(
                             "Editar domínios",
@@ -745,10 +912,15 @@ def pagina_master_dominios() -> None:
                                 cid, lista.refresh
                             ),
                         ).props("flat dense no-caps").classes("mst-btn-mini")
+                        site_url = (
+                            f"https://{c.dominio_site}/"
+                            if c.dominio_site
+                            else f"/loja/{c.slug}/"
+                        )
                         ui.button(
                             "Abrir site",
-                            on_click=lambda s=c.slug: ui.navigate.to(
-                                f"/loja/{s}/", new_tab=True,
+                            on_click=lambda u=site_url: ui.navigate.to(
+                                u, new_tab=True,
                             ),
                         ).props("flat dense no-caps").classes("mst-btn-mini")
 
@@ -761,22 +933,22 @@ def _dialog_dominios(conta_id: int, refresh) -> None:
         return
     with ui.dialog() as dlg, ui.card().classes("erp-dialog mst-dialog"):
         ui.html(f"<h3>Domínios de {conta.nome}</h3>")
+        ui.html(
+            '<p class="erp-ajuda">A loja acessa o ERP digitando o subdomínio no '
+            "navegador. O site público usa o domínio próprio abaixo.</p>"
+        )
         sub = ui.input(
-            "Subdomínio temporário", value=conta.subdominio,
-            placeholder="empresa.plataforma.com.br",
+            "Subdomínio (acesso ERP)", value=conta.subdominio,
+            placeholder="minha-loja.plataforma.com.br",
         ).classes("erp-input-full")
         site = ui.input(
             "Domínio do site", value=conta.dominio_site,
-            placeholder="www.empresa.com.br",
-        ).classes("erp-input-full")
-        erp = ui.input(
-            "Domínio do ERP", value=conta.dominio_erp,
-            placeholder="login.empresa.com.br",
+            placeholder="www.minha-loja.com.br",
         ).classes("erp-input-full")
 
         def salvar() -> None:
             atualizar_dominios(
-                conta_id, sub.value or "", site.value or "", erp.value or "",
+                conta_id, sub.value or "", site.value or "",
             )
             dlg.close()
             ui.notify("Domínios atualizados.", type="positive")
@@ -883,8 +1055,10 @@ def pagina_master_config() -> None:
             "Domínio base dos subdomínios", value=cfg.dominio_base,
         ).classes("erp-input-full")
         ui.html(
-            '<p class="erp-ajuda">Novas empresas recebem '
-            "<code>identificador.dominio-base</code> como subdomínio.</p>"
+            '<p class="erp-ajuda">Subdomínio ERP das novas empresas: '
+            "<code>identificador.dominio-base</code> "
+            "(ex.: sigma.plataforma.com.br). A plataforma não possui domínio "
+            "próprio; o Master acessa via localhost.</p>"
         )
 
         def salvar() -> None:

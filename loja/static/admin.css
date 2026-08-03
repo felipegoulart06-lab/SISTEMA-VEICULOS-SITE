@@ -1017,6 +1017,22 @@ body:has(.erp-app) .nicegui-content > div {
 
 .erp-login-sep { color: #cbd5e1; }
 
+.erp-login-master .erp-login-brand {
+    background: linear-gradient(145deg, #0f172a 0%, #1e3a5f 55%, #2563eb 100%);
+}
+.erp-login-master .erp-login-brand-logo { color: #fff; }
+.erp-login-master .erp-login-brand-loja { color: #bfdbfe; }
+.erp-login-master .erp-login-features li { color: #e2e8f0; }
+.erp-login-master .erp-login-brand-copy { color: #94a3b8; }
+
+.erp-login-empresa .erp-login-brand {
+    background: linear-gradient(145deg, #1a1a1a 0%, #7f1d1d 45%, #c0392b 100%);
+}
+.erp-login-empresa .erp-login-brand-logo { color: #fff; }
+.erp-login-empresa .erp-login-brand-loja { color: #fecaca; }
+.erp-login-empresa .erp-login-features li { color: #f1f5f9; }
+.erp-login-empresa .erp-login-brand-copy { color: #cbd5e1; }
+
 @media (max-width: 768px) {
     .erp-login-page { flex-direction: column; }
 
@@ -1523,6 +1539,86 @@ body:has(.erp-login-page) .q-page {
     color: var(--erp-accent) !important;
 }
 .mst-btn-perigo { color: #b91c1c !important; }
+.mst-contagem-exclusao {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: #92400e;
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+    border-radius: 999px;
+    padding: 3px 10px;
+    white-space: nowrap;
+    line-height: 1.3;
+}
+.mst-contagem-exclusao strong { font-weight: 800; margin: 0 2px; }
+.mst-exclusao-bloqueada {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    padding: 2px 8px;
+    color: #9ca3af;
+    text-decoration: line-through;
+    cursor: not-allowed;
+    user-select: none;
+}
+.mst-form-criar {
+    width: 100%;
+}
+.mst-field-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #374151;
+    margin: 8px 0 4px;
+    width: 100%;
+}
+.mst-dominios-preview {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin: 4px 0 8px;
+    line-height: 1.55;
+}
+.mst-dominios-preview code {
+    background: #e2e8f0;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+.mst-cor-tema-row {
+    margin: 0 0 12px;
+    width: 100%;
+}
+.mst-cor-preview {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    border-radius: 10px;
+    border: 2px solid #e5e7eb;
+    flex-shrink: 0;
+}
+.mst-btn-paleta {
+    flex-shrink: 0;
+}
+.mst-paleta-cor {
+    width: min(320px, calc(100vw - 32px)) !important;
+    overflow: visible !important;
+}
+.mst-paleta-cor .q-color {
+    width: 100%;
+}
+.mst-senha-row {
+    margin-bottom: 8px;
+}
+.mst-senha-row .erp-input-full {
+    min-width: 0;
+}
+.mst-btn-gerar-token {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
 .mst-dialog { width: min(560px, calc(100vw - 32px)); max-width: 100%; }
 .mst-sucesso {
     background: #f0fdf4;
@@ -1671,8 +1767,8 @@ body:has(.erp-login-page) .q-page {
 
 /* ====== Domínios, provisionamento e páginas institucionais ====== */
 .mst-head-dom {
-    grid-template-columns: 1.3fr 1.6fr 1.1fr 100px 90px 110px 1.5fr;
-    min-width: 980px;
+    grid-template-columns: 1.4fr 1.8fr 1.4fr 1.6fr;
+    min-width: 720px;
 }
 .mst-nota {
     background: #eff6ff;
@@ -1765,8 +1861,8 @@ body:has(.erp-login-page) .q-page {
 }
 
 .mst-head-dom {
-    grid-template-columns: 1.2fr 1.4fr 1.4fr 1.4fr 1fr !important;
-    min-width: 760px;
+    grid-template-columns: 1.4fr 1.8fr 1.4fr 1.6fr !important;
+    min-width: 720px;
 }
 
 .mst-empresa {

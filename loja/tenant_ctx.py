@@ -16,6 +16,8 @@ from contextvars import ContextVar
 
 from nicegui import app
 
+from loja.roteamento_host import get_contexto_host
+
 _slug_ctx: ContextVar[str | None] = ContextVar("tenant_slug", default=None)
 
 
@@ -72,7 +74,9 @@ def tenant_escopo(slug: str):
 
 
 def site_base(slug: str | None = None) -> str:
-    """Prefixo do site público. Ex: /loja/sigma"""
+    """Prefixo do site. No domínio da loja fica vazio; em dev usa /loja/{slug}."""
+    if get_contexto_host().modo == "site":
+        return ""
     ativo = (slug or get_tenant_slug() or "").strip().lower()
     if not ativo:
         return ""

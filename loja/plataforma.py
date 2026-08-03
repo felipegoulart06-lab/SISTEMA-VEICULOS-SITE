@@ -81,10 +81,16 @@ STATUS_CONTA = ["teste", "ativa", "suspensa", "cancelada"]
 STATUS_LABEL = {
     "teste": "Em teste",
     "ativa": "Ativa",
-    "suspensa": "Suspensa",
+    "suspensa": "Desativada",
     "cancelada": "Cancelada",
 }
 STATUS_COM_ACESSO = ("teste", "ativa")
+DIAS_PARA_EXCLUSAO = 31
+# Status exibidos ao criar empresa no Master
+STATUS_CRIACAO = {
+    "ativa": "Ativo",
+    "suspensa": "Desativado",
+}
 
 # Logs — apenas o ciclo de vida da empresa
 TIPOS_LOG = [
@@ -215,18 +221,54 @@ def normalizar_dominio(dominio: str) -> str:
     return dominio.strip("/").split("/")[0]
 
 
+def obter_dominio_base(db: Session | None = None) -> str:
+    """Domínio raiz usado para gerar subdomínios únicos por empresa."""
+    if db is None:
+        with get_plataforma_session() as sess:
+            return obter_dominio_base(sess)
+    cfg = db.scalar(select(ConfigPlataforma).limit(1))
+    base = (cfg.dominio_base if cfg else "plataforma.com.br") or "plataforma.com.br"
+    return normalizar_dominio(base) or "plataforma.com.br"
+
+
+def gerar_dominios_empresa(slug: str, base: str | None = None) -> dict[str, str]:
+    """Gera subdomínio ERP; domínio do site é configurado depois pelo Master."""
+    slug = (slug or "").strip().lower()
+    base = normalizar_dominio(base) if base else obter_dominio_base()
+    if not base:
+        base = "plataforma.com.br"
+    sub = f"{slug}.{base}"
+    return {
+        "subdominio": sub,
+        "dominio_site": "",
+        "dominio_erp": sub,
+    }
+
+
+def _dominio_em_uso(db: Session, dominio: str, exceto_id: int | None = None) -> bool:
+    if not dominio:
+        return False
+    for campo in ("subdominio", "dominio_site", "dominio_erp"):
+        q = select(Conta.id).where(getattr(Conta, campo) == dominio)
+        if exceto_id:
+            q = q.where(Conta.id != exceto_id)
+        if db.scalar(q):
+            return True
+    return False
+
+
 # --------------------------------------------------------------------- init
 
 def _migrar_plataforma() -> None:
-    if usando_postgres():
-        return
     insp = sa_inspect(plataforma_engine)
     tabelas = set(insp.get_table_names())
+    tipo_dt = "TIMESTAMPTZ" if usando_postgres() else "DATETIME"
 
-    novas_contas = {
+    novas_empresas = {
         "status": "VARCHAR(20) DEFAULT 'teste'",
         "plano_id": "INTEGER",
-        "vencimento_em": "DATETIME",
+        "vencimento_em": tipo_dt,
+        "desativada_em": tipo_dt,
         "subdominio": "VARCHAR(200) DEFAULT ''",
         "dominio_site": "VARCHAR(200) DEFAULT ''",
         "dominio_erp": "VARCHAR(200) DEFAULT ''",
@@ -234,12 +276,13 @@ def _migrar_plataforma() -> None:
         "favicon_url": "VARCHAR(500) DEFAULT ''",
         "tema_cor": "VARCHAR(7) DEFAULT '#c0392b'",
         "observacoes": "VARCHAR(500) DEFAULT ''",
-        "ultimo_acesso": "DATETIME",
+        "ultimo_acesso": tipo_dt,
         "dominio_proprio": "VARCHAR(200) DEFAULT ''",
         "tema": "VARCHAR(40) DEFAULT 'padrao'",
         "idioma": "VARCHAR(10) DEFAULT 'pt-BR'",
         "fuso_horario": "VARCHAR(60) DEFAULT 'America/Sao_Paulo'",
-        "provisionada_em": "DATETIME",
+        "provisionada_em": tipo_dt,
+        "ativa": "BOOLEAN DEFAULT TRUE",
     }
     novas_config = {
         "dominio_base": "VARCHAR(120) DEFAULT 'plataforma.com.br'",
@@ -250,30 +293,35 @@ def _migrar_plataforma() -> None:
         "dias_licenca": "INTEGER DEFAULT 30",
     }
 
-    with plataforma_engine.begin() as conn:
-        for tabela, colunas in (
-            ("contas", novas_contas),
-            ("config_plataforma", novas_config),
-            ("planos", novas_planos),
-        ):
-            if tabela not in tabelas:
+    for tabela, colunas in (
+        ("empresas", novas_empresas),
+        ("contas", novas_empresas),  # legado SQLite
+        ("config_plataforma", novas_config),
+        ("planos", novas_planos),
+    ):
+        if tabela not in tabelas:
+            continue
+        existentes = {c["name"] for c in insp.get_columns(tabela)}
+        for coluna, tipo in colunas.items():
+            if coluna in existentes:
                 continue
-            existentes = {c["name"] for c in insp.get_columns(tabela)}
-            for coluna, tipo in colunas.items():
-                if coluna not in existentes:
+            # Transação isolada: falha de privilege não aborta as demais
+            if_not = " IF NOT EXISTS" if usando_postgres() else ""
+            try:
+                with plataforma_engine.begin() as conn:
                     conn.execute(
-                        text(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo}")
+                        text(
+                            f'ALTER TABLE "{tabela}" '
+                            f"ADD COLUMN{if_not} {coluna} {tipo}"
+                        )
                     )
+            except Exception:
+                pass
 
 
 def init_plataforma() -> None:
-    if not usando_postgres():
-        PlataformaBase.metadata.create_all(bind=plataforma_engine)
-        _migrar_plataforma()
-    else:
-        # Em Postgres as tabelas já vêm das migrações Supabase.
-        # Garante apenas o mínimo caso alguma falte.
-        PlataformaBase.metadata.create_all(bind=plataforma_engine)
+    PlataformaBase.metadata.create_all(bind=plataforma_engine)
+    _migrar_plataforma()
 
     with get_plataforma_session() as db:
         if db.scalar(select(AdminMaster).limit(1)) is None:
@@ -303,8 +351,28 @@ def init_plataforma() -> None:
 
         _migrar_conta_inicial(db)
         _limpar_dados_legado(db)
+        _garantir_datas_desativacao(db)
 
     _garantir_estrutura_tenants()
+
+
+def _garantir_datas_desativacao(db: Session) -> None:
+    """Empresas já suspensas sem data passam a contar 31 dias a partir de agora."""
+    from loja.tempo import agora
+
+    agora_dt = agora()
+    alterou = False
+    for c in db.scalars(
+        select(Conta).where(
+            Conta.status == "suspensa",
+            Conta.desativada_em.is_(None),
+        )
+    ).all():
+        c.desativada_em = agora_dt
+        c.ativa = False
+        alterou = True
+    if alterou:
+        db.commit()
 
 
 def _limpar_dados_legado(db: Session) -> None:
@@ -385,14 +453,16 @@ def _migrar_conta_inicial(db: Session) -> None:
 
 
 def _aplicar_dominios_padrao(db: Session, conta: Conta) -> None:
-    cfg = db.scalar(select(ConfigPlataforma).limit(1))
-    base = (cfg.dominio_base if cfg else "plataforma.com.br") or "plataforma.com.br"
+    doms = gerar_dominios_empresa(conta.slug, obter_dominio_base(db))
     if not conta.subdominio:
-        conta.subdominio = f"{conta.slug}.{base}"
+        conta.subdominio = doms["subdominio"]
+    if not conta.dominio_erp:
+        conta.dominio_erp = conta.subdominio or doms["subdominio"]
 
 
 def _garantir_estrutura_tenants() -> None:
     """Aplica a estrutura atual às empresas já existentes."""
+    from loja.migracao_sqlite import sincronizar_tenant_sqlite_se_vazio
     from loja.provisionamento import criar_storage, migrar_tenant
 
     for conta in listar_contas():
@@ -401,14 +471,16 @@ def _garantir_estrutura_tenants() -> None:
         try:
             migrar_tenant(conta.slug, conta.nome, conta.email)
             criar_storage(conta.slug)
+            sincronizar_tenant_sqlite_se_vazio(conta.slug)
         except Exception:  # noqa: BLE001 - init não pode derrubar o app
             continue
 
     with get_plataforma_session() as db:
         alterou = False
         for conta in db.scalars(select(Conta)).all():
-            if not conta.subdominio:
-                _aplicar_dominios_padrao(db, conta)
+            antes = (conta.subdominio, conta.dominio_site, conta.dominio_erp)
+            _aplicar_dominios_padrao(db, conta)
+            if (conta.subdominio, conta.dominio_site, conta.dominio_erp) != antes:
                 alterou = True
             if conta.status not in STATUS_CONTA:
                 conta.status = "ativa"
@@ -482,8 +554,8 @@ def empresa_pode_acessar(conta: Conta) -> tuple[bool, str]:
     """Regra única de acesso ao ERP."""
     from loja.tempo import agora, naive
 
-    if conta.status == "suspensa":
-        return False, "Empresa suspensa. Fale com o administrador da plataforma."
+    if conta.status == "suspensa" or not conta.ativa:
+        return False, "Empresa desativada. Fale com o administrador da plataforma."
     if conta.status == "cancelada":
         return False, "Empresa cancelada."
     venc = naive(conta.vencimento_em)
@@ -620,7 +692,8 @@ def listar_contas(apenas_ativas: bool = False) -> list[Conta]:
                 "id": r.id, "nome": r.nome, "email": r.email, "slug": r.slug,
                 "status": r.status, "ativa": r.ativa,
                 "vencimento_em": r.vencimento_em, "plano_id": r.plano_id,
-                "criado_em": r.criado_em, "subdominio": r.subdominio,
+                "criado_em": r.criado_em, "desativada_em": r.desativada_em,
+                "subdominio": r.subdominio,
                 "dominio_site": r.dominio_site, "dominio_erp": r.dominio_erp,
                 "tema_cor": r.tema_cor, "logo_url": r.logo_url,
                 "favicon_url": r.favicon_url, "observacoes": r.observacoes,
@@ -667,6 +740,59 @@ def obter_conta_por_slug(slug: str) -> Conta | None:
         return c
 
 
+def _variantes_host(host: str) -> list[str]:
+    h = normalizar_dominio(host)
+    if not h:
+        return []
+    variantes = [h]
+    if h.startswith("www."):
+        variantes.append(h[4:])
+    else:
+        variantes.append(f"www.{h}")
+    return variantes
+
+
+def obter_conta_por_subdominio(host: str) -> Conta | None:
+    """Empresa cujo subdomínio ERP coincide com o Host."""
+    for h in _variantes_host(host):
+        with get_plataforma_session() as db:
+            c = db.scalar(
+                select(Conta).where(
+                    Conta.subdominio == h,
+                    Conta.ativa.is_(True),
+                )
+            )
+            if c is None:
+                c = db.scalar(
+                    select(Conta).where(
+                        Conta.dominio_erp == h,
+                        Conta.ativa.is_(True),
+                    )
+                )
+            if c:
+                db.expunge(c)
+                return c
+    return None
+
+
+def obter_conta_por_dominio_site(host: str) -> Conta | None:
+    """Empresa cujo domínio público do site coincide com o Host."""
+    for h in _variantes_host(host):
+        if not h:
+            continue
+        with get_plataforma_session() as db:
+            c = db.scalar(
+                select(Conta).where(
+                    Conta.dominio_site == h,
+                    Conta.ativa.is_(True),
+                )
+            )
+            if c:
+                db.expunge(c)
+                return c
+    return None
+
+
 def criar_conta(
     nome: str,
     email: str,
@@ -675,19 +801,20 @@ def criar_conta(
     plano_id: int | None = None,
     status: str = "teste",
     dias_licenca: int | None = None,
-    dominio_site: str = "",
-    dominio_erp: str = "",
     logo_url: str = "",
     favicon_url: str = "",
     tema_cor: str = "#c0392b",
     observacoes: str = "",
 ) -> tuple[Conta, str, "ResultadoProvisionamento"]:
-    """Cria a empresa e provisiona ERP + Site isolados e vazios."""
+    """Cria a empresa, provisiona ERP + site limpos e gera domínios exclusivos."""
     from loja.provisionamento import provisionar_empresa
 
     email = email.strip().lower()
     nome = nome.strip()
     slug = slugify(slug or nome)
+    senha_informada = (token or "").strip()
+    if not senha_informada:
+        raise ValueError("Informe a senha temporária do administrador.")
 
     with get_plataforma_session() as db:
         if db.scalar(select(Conta).where(Conta.email == email)):
@@ -703,15 +830,24 @@ def criar_conta(
         plano_id = plano.id if plano else None
         plano_nome = plano.nome if plano else ""
         dias = dias_licenca or (plano.dias_licenca if plano else 30)
-        cfg = db.scalar(select(ConfigPlataforma).limit(1))
-        base = (cfg.dominio_base if cfg else "plataforma.com.br")
+        base = obter_dominio_base(db)
+        doms = gerar_dominios_empresa(slug, base)
+        for dom in doms.values():
+            if _dominio_em_uso(db, dom):
+                raise ValueError(f"Domínio {dom} já está em uso por outra empresa.")
 
     relatorio = provisionar_empresa(
-        slug=slug, nome=nome, email=email, senha_temporaria=token or None,
+        slug=slug, nome=nome, email=email, senha_temporaria=senha_informada,
         cor=tema_cor or "#c0392b", logo=logo_url or "",
         favicon=favicon_url or "", plano=plano_nome,
     )
     senha = relatorio.senha_temporaria
+
+    status_final = status if status in STATUS_CRIACAO else "ativa"
+    if status_final == "suspensa":
+        desativada = datetime.now()
+    else:
+        desativada = None
 
     with get_plataforma_session() as db:
         conta = Conta(
@@ -719,13 +855,14 @@ def criar_conta(
             email=email,
             token_hash=pbkdf2_sha256.hash(senha),
             slug=slug,
-            status=status if status in STATUS_CONTA else "teste",
-            ativa=status in STATUS_COM_ACESSO,
+            status=status_final,
+            ativa=status_final in STATUS_COM_ACESSO,
+            desativada_em=desativada,
             plano_id=plano_id,
             vencimento_em=datetime.now() + timedelta(days=dias),
-            subdominio=f"{slug}.{base}",
-            dominio_site=normalizar_dominio(dominio_site),
-            dominio_erp=normalizar_dominio(dominio_erp),
+            subdominio=doms["subdominio"],
+            dominio_site=doms["dominio_site"],
+            dominio_erp=doms["dominio_erp"],
             logo_url=logo_url or "",
             favicon_url=favicon_url or "",
             tema_cor=tema_cor or "#c0392b",
@@ -781,7 +918,10 @@ def atualizar_conta(conta_id: int, dados: dict) -> None:
 
 
 def atualizar_dominios(
-    conta_id: int, subdominio: str, dominio_site: str, dominio_erp: str,
+    conta_id: int,
+    subdominio: str,
+    dominio_site: str,
+    dominio_erp: str = "",
 ) -> None:
     """Somente o Admin Master altera domínios."""
     alterados: list[str] = []
@@ -792,7 +932,8 @@ def atualizar_dominios(
         novos = {
             "subdominio": normalizar_dominio(subdominio),
             "dominio_site": normalizar_dominio(dominio_site),
-            "dominio_erp": normalizar_dominio(dominio_erp),
+            "dominio_erp": normalizar_dominio(dominio_erp)
+            or normalizar_dominio(subdominio),
         }
         for campo, valor in novos.items():
             if valor != getattr(c, campo):
@@ -809,6 +950,9 @@ def atualizar_dominios(
 
 
 def alterar_status_conta(conta_id: int, status: str) -> None:
+    from loja.cache_local import invalidar_conta, invalidar_queries
+    from loja.tempo import agora
+
     if status not in STATUS_CONTA:
         return
     with get_plataforma_session() as db:
@@ -817,13 +961,51 @@ def alterar_status_conta(conta_id: int, status: str) -> None:
             return
         c.status = status
         c.ativa = status in STATUS_COM_ACESSO
+        if status == "suspensa":
+            if c.desativada_em is None:
+                c.desativada_em = agora()
+        else:
+            c.desativada_em = None
         nome = c.nome
+        slug = c.slug
         db.commit()
+    invalidar_conta(conta_id)
+    invalidar_queries("plat:contas")
+    from loja.cache_local import invalidar_tenant
+    invalidar_tenant(slug)
     tipo = "empresa_suspensa" if status == "suspensa" else "empresa_editada"
     registrar_log(
         tipo, f"Empresa {nome} agora está {STATUS_LABEL[status]}.",
         conta_id, nome,
     )
+
+
+def data_liberacao_exclusao(conta: Conta) -> datetime | None:
+    """Data a partir da qual a exclusão fica liberada (desativada_em + 31 dias)."""
+    from loja.tempo import naive
+
+    if conta.status != "suspensa":
+        return None
+    base = naive(getattr(conta, "desativada_em", None))
+    if base is None:
+        return None
+    return base + timedelta(days=DIAS_PARA_EXCLUSAO)
+
+
+def dias_restantes_exclusao(conta: Conta) -> int | None:
+    """Dias restantes até poder excluir. 0 = já pode. None = não desativada."""
+    from loja.tempo import agora
+
+    liberacao = data_liberacao_exclusao(conta)
+    if liberacao is None:
+        return None
+    resto = (liberacao.date() - agora().date()).days
+    return max(0, resto)
+
+
+def pode_excluir_conta(conta: Conta) -> bool:
+    dias = dias_restantes_exclusao(conta)
+    return dias is not None and dias == 0
 
 
 def renovar_licenca(conta_id: int, dias: int = 30) -> datetime | None:
@@ -866,15 +1048,27 @@ def regenerar_token(conta_id: int) -> str:
 
 
 def excluir_conta(conta_id: int) -> None:
+    from loja.cache_local import invalidar_conta, invalidar_queries
     from loja.provisionamento import remover_storage
 
     with get_plataforma_session() as db:
         c = db.get(Conta, conta_id)
         if not c:
             return
+        if not pode_excluir_conta(c):
+            dias = dias_restantes_exclusao(c)
+            if dias is None:
+                raise ValueError(
+                    "Desative a empresa e aguarde 31 dias para excluir."
+                )
+            raise ValueError(
+                f"Exclusão liberada em {dias} dia(s). Aguarde o prazo."
+            )
         slug, nome = c.slug, c.nome
         db.delete(c)
         db.commit()
+    invalidar_conta(conta_id)
+    invalidar_queries("plat:contas")
 
     liberar_engine(slug)
     if usando_postgres():

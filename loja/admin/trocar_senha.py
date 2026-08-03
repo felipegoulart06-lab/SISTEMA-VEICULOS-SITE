@@ -3,6 +3,7 @@
 from nicegui import app, ui
 
 from loja.auth import concluir_troca_senha, deve_trocar_senha, logado
+from loja.roteamento_host import erp_admin_url, erp_login_url
 
 
 def pagina_trocar_senha() -> None:
@@ -16,10 +17,10 @@ def pagina_trocar_senha() -> None:
     )
 
     if not logado():
-        ui.navigate.to("/admin/login")
+        ui.navigate.to(erp_login_url())
         return
     if not deve_trocar_senha():
-        ui.navigate.to("/admin")
+        ui.navigate.to(erp_admin_url())
         return
 
     empresa = app.storage.user.get("usuario_nome", "sua empresa")
@@ -77,7 +78,7 @@ def pagina_trocar_senha() -> None:
                         ui.notify(str(err), type="negative")
                         return
                     ui.notify("Senha atualizada!", type="positive")
-                    ui.navigate.to("/admin")
+                    ui.navigate.to(erp_admin_url())
 
                 confirma.on("keydown.enter", salvar)
                 ui.button("Salvar e entrar", on_click=salvar).classes(

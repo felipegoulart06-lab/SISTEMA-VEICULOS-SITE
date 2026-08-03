@@ -315,6 +315,12 @@ def gerar_senha_temporaria(tamanho: int = 10) -> str:
     return f"{corpo[:5]}-{corpo[5:]}"
 
 
+def gerar_token_longo(tamanho: int = 25) -> str:
+    """Token alfanumérico (ex.: 25 dígitos/letras) para senha temporária."""
+    alfabeto = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alfabeto) for _ in range(tamanho))
+
+
 def pasta_storage(slug: str) -> Path:
     return STORAGE_DIR / slug
 

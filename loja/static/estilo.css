@@ -16,18 +16,61 @@ html {
     -webkit-text-size-adjust: 100%;
 }
 
-html, body, #q-app {
-    width: 100%;
-    max-width: 100%;
+html, body, #q-app, #app {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 100%;
 }
 
+.q-layout,
+.q-page-container,
 .q-page,
 .nicegui-content,
-.body--light {
+.body--light,
+.q-page > div {
     padding: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
     max-width: none !important;
     width: 100% !important;
+    min-width: 100% !important;
     overflow-x: hidden !important;
+    align-items: stretch !important;
+    box-sizing: border-box !important;
+}
+
+/* NiceGUI: align-items:flex-start deixa o site colado à esquerda */
+.nicegui-content,
+.nicegui-column {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0 !important;
+}
+
+.nicegui-content > *:not(.site-redes-fixas):not(.site-btn-avaliacao):not(.site-btn-atendimento):not(.site-chat-panel) {
+    width: 100% !important;
+    max-width: 100% !important;
+    align-self: stretch !important;
+    box-sizing: border-box !important;
+}
+
+.site-spa-host,
+.site-spa-painel {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    gap: 0 !important;
+    box-sizing: border-box !important;
+}
+
+.site-spa-painel > * {
+    width: 100% !important;
+    align-self: stretch !important;
+    box-sizing: border-box !important;
 }
 
 body {
@@ -219,6 +262,8 @@ img { max-width: 100%; height: auto; display: block; }
 .banner {
     position: relative;
     width: 100%;
+    max-width: var(--largura-max);
+    margin: 0 auto;
     height: clamp(180px, 35vw, 340px);
     overflow: hidden;
     background: var(--cinza-escuro);
@@ -234,14 +279,24 @@ img { max-width: 100%; height: auto; display: block; }
 /* ---- fixos laterais: redes + atendimento (todas as páginas públicas) ---- */
 
 .site-redes-fixas {
-    position: fixed;
-    right: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 200;
-    display: flex;
-    flex-direction: column;
+    position: fixed !important;
+    right: 0 !important;
+    left: auto !important;
+    top: 50% !important;
+    bottom: auto !important;
+    transform: translateY(-50%) !important;
+    z-index: 200 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    width: auto !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    height: auto !important;
+    align-self: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
     box-shadow: -2px 0 12px rgba(0, 0, 0, 0.08);
+    pointer-events: auto !important;
 }
 
 .site-redes-fixas a {
@@ -268,13 +323,18 @@ img { max-width: 100%; height: auto; display: block; }
 .site-btn-atendimento {
     position: fixed !important;
     right: 0 !important;
+    left: auto !important;
     bottom: 24px !important;
+    top: auto !important;
     z-index: 201 !important;
     width: 48px !important;
+    max-width: 48px !important;
     height: 48px !important;
     min-width: 48px !important;
     min-height: 48px !important;
     padding: 0 !important;
+    margin: 0 !important;
+    align-self: auto !important;
     border-radius: 0 !important;
     background: var(--preto) !important;
     color: var(--branco) !important;
@@ -1509,9 +1569,11 @@ main { min-width: 0; width: 100%; }
 
 /* depoimentos home */
 .secao-depoimentos {
-    max-width: 1100px;
+    width: 100%;
+    max-width: var(--largura-max);
     margin: 48px auto;
     padding: 0 16px;
+    box-sizing: border-box;
 }
 
 .secao-depoimentos h2 {
@@ -2500,11 +2562,20 @@ body:has(.site-chat-panel.aberto) .detalhe-financiamento-flutuante {
 .site-btn-avaliacao {
     position: fixed !important;
     left: 16px !important;
+    right: auto !important;
     bottom: 24px !important;
+    top: auto !important;
     z-index: 201 !important;
     display: inline-flex !important;
     align-items: center !important;
+    justify-content: flex-start !important;
     gap: 8px !important;
+    width: auto !important;
+    max-width: max-content !important;
+    min-width: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    align-self: auto !important;
     padding: 12px 16px !important;
     background: var(--cor-primaria, #c0392b) !important;
     color: var(--branco) !important;
@@ -2519,6 +2590,7 @@ body:has(.site-chat-panel.aberto) .detalhe-financiamento-flutuante {
     visibility: hidden !important;
     pointer-events: none !important;
     transition: opacity 0.22s ease, transform 0.22s ease, visibility 0.22s ease !important;
+    white-space: nowrap !important;
 }
 
 .site-btn-avaliacao.visivel {

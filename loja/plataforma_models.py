@@ -67,6 +67,10 @@ class Conta(PlataformaBase):
     vencimento_em: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True,
     )
+    # Desativação: exclusão só liberada após 31 dias
+    desativada_em: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True,
+    )
     # Domínios — somente o Admin Master edita
     subdominio: Mapped[str] = mapped_column(String(200), default="")
     dominio_site: Mapped[str] = mapped_column(String(200), default="")

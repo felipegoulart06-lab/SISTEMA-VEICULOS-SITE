@@ -2,12 +2,14 @@ import os
 from pathlib import Path
 
 from nicegui import app, ui
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from loja.admin.login import pagina_login
 from loja.admin.trocar_senha import pagina_trocar_senha
 from loja.admin.master import pagina_master_login
 from loja.admin.spa_erp import montar_erp_spa, normalizar_rota_erp
 from loja.admin.spa_master import montar_master_spa, normalizar_rota_master
+from loja.auth import logado
 from loja.componentes import (
     barra_social,
     cabecalho,
@@ -23,7 +25,12 @@ from loja.repositorio import (
     config_como_dict,
     obter_veiculo_publico,
 )
-from loja.spa_site import montar_site_spa
+from loja.roteamento_host import (
+    get_contexto_host,
+    resolver_contexto_host,
+    set_contexto_host,
+)
+from loja.spa_site import CSS_LAYOUT_FIX, montar_site_spa
 from loja.tenant_ctx import ligar_tenant, site_url
 
 STATIC = Path(__file__).resolve().parent / "loja" / "static"
@@ -32,9 +39,20 @@ STORAGE.mkdir(parents=True, exist_ok=True)
 app.add_static_files("/static", STATIC)
 app.add_static_files("/media", STORAGE)
 
+
+class HostContextMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        set_contexto_host(
+            resolver_contexto_host(request.headers.get("host", ""))
+        )
+        return await call_next(request)
+
+
+app.add_middleware(HostContextMiddleware)
+
 init_db()
 
-CSS_SITE = "/static/estilo.css?v=19"
+CSS_SITE = "/static/estilo.css?v=22"
 
 
 def ativar_loja(slug: str) -> bool:
@@ -50,6 +68,7 @@ def _head_site(titulo: str, descricao: str = "") -> None:
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
     )
     ui.add_head_html(f'<link rel="stylesheet" href="{CSS_SITE}">')
+    ui.add_head_html(CSS_LAYOUT_FIX)
     ui.add_head_html(
         '<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">'
     )
@@ -94,10 +113,26 @@ def _salvar_filtros_estoque(filtros: FiltrosEstoque) -> None:
         pass
 
 
-# ---- Plataforma / landing ----
+# ---- Plataforma / landing (somente localhost — sem domínio próprio) ----
 
 @ui.page("/")
-def pagina_plataforma() -> None:
+def pagina_raiz() -> None:
+    ctx = get_contexto_host()
+    if ctx.modo == "erp" and ctx.slug:
+        ligar_tenant(ctx.slug)
+        if logado():
+            ui.navigate.to("/admin")
+        else:
+            pagina_login()
+        return
+    if ctx.modo == "site" and ctx.slug:
+        if not montar_site_spa(ctx.slug, "/"):
+            _loja_nao_encontrada()
+        return
+    _pagina_plataforma_local()
+
+
+def _pagina_plataforma_local() -> None:
     ui.add_head_html(
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
     )
@@ -106,7 +141,11 @@ def pagina_plataforma() -> None:
         "<style>body{margin:0;font-family:Inter,Segoe UI,sans-serif;background:#eef1f6}"
         ".plat{max-width:960px;margin:0 auto;padding:48px 20px}"
         ".plat h1{font-size:32px;margin:0 0 8px}.plat p{color:#6b7280}"
-        ".plat-acoes{display:flex;gap:12px;flex-wrap:wrap;margin:28px 0}"
+        ".plat-acoes{display:flex;gap:16px;flex-wrap:wrap;margin:28px 0}"
+        ".plat-login-box{flex:1;min-width:240px;background:#fff;border:1px solid #e5e7eb;"
+        "border-radius:14px;padding:20px}.plat-login-box p{margin:6px 0 14px;color:#6b7280;font-size:14px}"
+        ".plat-btn-master{background:#1e3a5f!important;color:#fff!important;width:100%}"
+        ".plat-btn-empresa{background:#c0392b!important;color:#fff!important;width:100%}"
         ".plat-card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;"
         "padding:18px;margin-top:12px}.plat-card a{color:#1e3a5f;font-weight:700}"
         "</style>"
@@ -115,28 +154,30 @@ def pagina_plataforma() -> None:
     with ui.element("div").classes("plat"):
         ui.html("<h1>Plataforma White Label</h1>")
         ui.html(
-            "<p>ERP + Site para lojas de veículos. "
-            "Cada conta possui ambiente isolado.</p>"
+            "<p>Painel Master em ambiente local. "
+            "Cada loja acessa o ERP pelo <strong>subdomínio</strong> "
+            "cadastrado no Master; o site público fica no domínio próprio da loja.</p>"
         )
         with ui.element("div").classes("plat-acoes"):
-            ui.button(
-                "Admin Master",
-                on_click=lambda: ui.navigate.to("/master/login"),
-            ).props("unelevated no-caps").style("background:#1e3a5f;color:#fff")
-            ui.button(
-                "Login da loja",
-                on_click=lambda: ui.navigate.to("/admin/login"),
-            ).props("outline no-caps")
+            with ui.element("div").classes("plat-login-box plat-login-master"):
+                ui.html("<strong>Painel Master</strong>")
+                ui.html("<p>Gestão da plataforma (somente local/dev)</p>")
+                ui.button(
+                    "Login Master",
+                    on_click=lambda: ui.navigate.to("/master/login"),
+                ).props("unelevated no-caps").classes("plat-btn-master")
         ui.html("<h3 style='margin-top:32px'>Lojas ativas</h3>")
         if not contas:
             ui.html("<p>Nenhuma conta ativa. Crie uma no painel Master.</p>")
         else:
             for c in contas:
+                sub = c.subdominio or "—"
+                site = c.dominio_site or f"/loja/{c.slug}/ (dev)"
                 with ui.element("div").classes("plat-card"):
                     ui.html(
                         f"<strong>{c.nome}</strong><br>"
-                        f'<a href="/loja/{c.slug}/" target="_blank">'
-                        f"Abrir site /loja/{c.slug}/</a>"
+                        f"ERP: <code>{sub}</code><br>"
+                        f"Site: <code>{site}</code>"
                     )
 
 
@@ -264,38 +305,146 @@ def pagina_avaliacao_loja(slug: str) -> None:
         _loja_nao_encontrada()
 
 
-# Compatibilidade: rotas antigas → loja demo sigma
+# ---- Login ERP no subdomínio da empresa ----
+
+@ui.page("/login")
+def rota_login_subdominio() -> None:
+    ctx = get_contexto_host()
+    if ctx.modo == "erp" and ctx.slug:
+        ligar_tenant(ctx.slug)
+        pagina_login()
+        return
+    ui.navigate.to("/admin/login")
+
+
+@ui.page("/trocar-senha")
+def rota_trocar_senha_subdominio() -> None:
+    ctx = get_contexto_host()
+    if ctx.modo == "erp":
+        pagina_trocar_senha()
+        return
+    ui.navigate.to("/admin/trocar-senha")
+
+
+def _montar_site_host(slug: str, rota: str, **kwargs) -> bool:
+    financ = kwargs if kwargs else None
+    if not montar_site_spa(slug, rota, financ_kwargs=financ):
+        _loja_nao_encontrada()
+        return False
+    return True
+
+
+def _site_por_host(rota: str, **kwargs) -> bool:
+    ctx = get_contexto_host()
+    if ctx.modo == "site" and ctx.slug:
+        return _montar_site_host(ctx.slug, rota, **kwargs)
+    return False
+
+
+# ---- Site no domínio próprio da loja (rotas na raiz) ----
+
 @ui.page("/estoque")
-def _legado_estoque() -> None:
-    ui.navigate.to("/loja/sigma/estoque")
+def rota_estoque_host() -> None:
+    if not _site_por_host("/estoque"):
+        ui.navigate.to("/loja/sigma/estoque")
 
 
 @ui.page("/avaliacao")
-def _legado_avaliacao() -> None:
-    ui.navigate.to("/loja/sigma/avaliacao")
+def rota_avaliacao_host() -> None:
+    if not _site_por_host("/avaliacao"):
+        ui.navigate.to("/loja/sigma/avaliacao")
 
 
 @ui.page("/financiamento")
-def _legado_financiamento() -> None:
-    ui.navigate.to("/loja/sigma/financiamento")
+def rota_financiamento_host(
+    marca: str = "",
+    modelo: str = "",
+    ano: str = "",
+    cor: str = "",
+    valor: float = 0,
+    veiculo_id: int = 0,
+) -> None:
+    kwargs = {}
+    if marca or modelo or ano or cor or valor or veiculo_id:
+        kwargs = {
+            "marca": marca,
+            "modelo": modelo,
+            "ano": ano,
+            "cor": cor,
+            "valor": valor,
+            "veiculo_id": veiculo_id,
+        }
+    if not _site_por_host("/financiamento", **kwargs):
+        ui.navigate.to("/loja/sigma/financiamento")
 
 
 @ui.page("/empresa")
-def _legado_empresa() -> None:
-    ui.navigate.to("/loja/sigma/empresa")
+def rota_empresa_host() -> None:
+    if not _site_por_host("/empresa"):
+        ui.navigate.to("/loja/sigma/empresa")
 
 
 @ui.page("/contato")
-def _legado_contato() -> None:
-    ui.navigate.to("/loja/sigma/contato")
+def rota_contato_host() -> None:
+    if not _site_por_host("/contato"):
+        ui.navigate.to("/loja/sigma/contato")
+
+
+@ui.page("/privacidade")
+def rota_privacidade_host() -> None:
+    ctx = get_contexto_host()
+    if ctx.modo == "site" and ctx.slug:
+        _pagina_conteudo_loja(ctx.slug, "privacidade")
+        return
+    ui.navigate.to("/loja/sigma/privacidade")
+
+
+@ui.page("/lgpd")
+def rota_lgpd_host() -> None:
+    ctx = get_contexto_host()
+    if ctx.modo == "site" and ctx.slug:
+        _pagina_conteudo_loja(ctx.slug, "lgpd")
+        return
+    ui.navigate.to("/loja/sigma/lgpd")
 
 
 @ui.page("/veiculo/{veiculo_id}")
-def _legado_veiculo(veiculo_id: int) -> None:
-    ui.navigate.to(f"/loja/sigma/veiculo/{veiculo_id}")
+def rota_veiculo_host(veiculo_id: int) -> None:
+    ctx = get_contexto_host()
+    if ctx.modo != "site" or not ctx.slug:
+        ui.navigate.to(f"/loja/sigma/veiculo/{veiculo_id}")
+        return
+    if not ativar_loja(ctx.slug):
+        _loja_nao_encontrada()
+        return
+    cfg = config_como_dict()
+    v = obter_veiculo_publico(veiculo_id)
+    if v is None:
+        _head_site(f"{cfg['nome']} — Veículo não encontrado")
+        barra_social()
+        cabecalho(lambda _: None)
+        with ui.element("div").classes("pagina-detalhe-erro"):
+            ui.html("<h1>Veículo não encontrado</h1>")
+            ui.link("Ver estoque", site_url("/estoque")).classes("btn btn-preto")
+        encerrar_pagina_site()
+        return
+    _head_site(f"{v.marca} {v.modelo} {v.ano} — {cfg['nome']}")
+
+    def buscar_detalhe(texto: str) -> None:
+        filtros = _filtros_estoque()
+        filtros.busca = texto
+        filtros.pagina = 1
+        _salvar_filtros_estoque(filtros)
+        ui.navigate.to(site_url("/estoque"))
+
+    barra_social()
+    cabecalho(buscar_detalhe)
+    with ui.element("div").classes("corpo-detalhe-wrap"):
+        montar_pagina_detalhe(veiculo_id)
+    encerrar_pagina_site()
 
 
-# ---- Admin Master (SPA: menu troca conteúdo sem reload) ----
+# Compatibilidade local: /loja/{slug}/...
 
 @ui.page("/master/login")
 def rota_master_login() -> None:
