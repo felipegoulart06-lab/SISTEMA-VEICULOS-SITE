@@ -2,12 +2,13 @@ from nicegui import ui
 
 from loja.auth import (
     deve_trocar_senha,
-    fazer_login,
     redirecionar_se_logado,
     redirecionar_se_master_logado,
+    tentar_login_empresa,
 )
 from loja.plataforma import motivo_bloqueio
 from loja.roteamento_host import erp_admin_url, erp_trocar_senha_url, get_contexto_host
+from loja.seguranca import mostrar_credenciais_demo
 
 
 def pagina_login() -> None:
@@ -66,7 +67,8 @@ def pagina_login() -> None:
 
                 def entrar() -> None:
                     ctx = get_contexto_host()
-                    if fazer_login(email.value or "", token.value or ""):
+                    ok, erro = tentar_login_empresa(email.value or "", token.value or "")
+                    if ok:
                         if ctx.modo == "erp" and ctx.slug:
                             from loja.auth import conta_slug
                             if conta_slug() != ctx.slug:
@@ -87,7 +89,7 @@ def pagina_login() -> None:
                         ui.notify("Login realizado!", type="positive")
                         ui.navigate.to(erp_admin_url())
                     else:
-                        bloqueio = motivo_bloqueio(email.value or "")
+                        bloqueio = erro or motivo_bloqueio(email.value or "")
                         ui.notify(
                             bloqueio or "E-mail ou senha inválidos.",
                             type="negative",
@@ -100,10 +102,11 @@ def pagina_login() -> None:
                     "erp-login-btn"
                 ).props("unelevated no-caps")
 
-                with ui.element("div").classes("erp-login-rodape-card"):
-                    ui.html(
-                        '<span class="erp-login-badge">Demo SIGMA</span>'
-                        "<code>admin@sigma.com</code>"
-                        '<span class="erp-login-sep">·</span>'
-                        "<code>admin123</code>"
-                    )
+                if mostrar_credenciais_demo():
+                    with ui.element("div").classes("erp-login-rodape-card"):
+                        ui.html(
+                            '<span class="erp-login-badge">Demo SIGMA</span>'
+                            "<code>admin@sigma.com</code>"
+                            '<span class="erp-login-sep">·</span>'
+                            "<code>admin123</code>"
+                        )

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -207,15 +206,15 @@ def metricas_institucionais() -> list[tuple[str, str]]:
 
 def salvar_upload_institucional(nome_arquivo: str, conteudo: bytes) -> str:
     """Salva upload e devolve URL pública /media/{slug}/uploads/..."""
+    from loja.seguranca import nome_upload_seguro, validar_upload_imagem
+
     slug = get_tenant_slug() or conta_slug()
     if not slug:
         raise RuntimeError("Empresa não identificada para upload.")
-    ext = Path(nome_arquivo or "imagem.jpg").suffix.lower()
-    if ext not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
-        ext = ".jpg"
+    ext = validar_upload_imagem(nome_arquivo, conteudo)
     pasta = pasta_storage(slug) / "uploads"
     pasta.mkdir(parents=True, exist_ok=True)
-    nome = f"institucional_{uuid.uuid4().hex[:12]}{ext}"
+    nome = nome_upload_seguro("institucional", ext)
     destino = pasta / nome
     destino.write_bytes(conteudo)
     return f"/media/{slug}/uploads/{nome}"

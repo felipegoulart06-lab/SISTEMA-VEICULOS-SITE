@@ -30,6 +30,7 @@ from loja.roteamento_host import (
     resolver_contexto_host,
     set_contexto_host,
 )
+from loja.seguranca import SecurityHeadersMiddleware, validar_ambiente
 from loja.spa_site import CSS_LAYOUT_FIX, montar_site_spa
 from loja.tenant_ctx import ligar_tenant, site_url
 
@@ -48,8 +49,10 @@ class HostContextMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(HostContextMiddleware)
 
+validar_ambiente()
 init_db()
 
 CSS_SITE = "/static/estilo.css?v=22"

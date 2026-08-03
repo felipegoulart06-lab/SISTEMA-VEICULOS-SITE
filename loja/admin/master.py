@@ -9,11 +9,12 @@ from nicegui import ui
 
 from loja.auth import (
     exigir_master,
-    fazer_login_master,
     fazer_logout_master,
     master_logado,
     master_nome,
+    tentar_login_master,
 )
+from loja.seguranca import mostrar_credenciais_demo
 from loja.provisionamento import gerar_token_longo
 from loja.tempo import naive
 from loja.plataforma import (
@@ -248,25 +249,38 @@ def pagina_master_login() -> None:
                     password=True,
                     password_toggle_button=True,
                 ).props("outlined dense hide-bottom-space").classes("erp-login-field")
+                codigo_totp = ui.input("Código 2FA (se ativo)").props(
+                    "outlined dense hide-bottom-space maxlength=8"
+                ).classes("erp-login-field")
 
                 def entrar() -> None:
-                    if fazer_login_master(email.value or "", senha.value or ""):
+                    ok, erro = tentar_login_master(
+                        email.value or "",
+                        senha.value or "",
+                        codigo_totp.value or "",
+                    )
+                    if ok:
                         ui.notify("Login Master realizado!", type="positive")
                         ui.navigate.to("/master")
                     else:
-                        ui.notify("E-mail ou senha incorretos.", type="negative")
+                        ui.notify(
+                            erro or "E-mail ou senha incorretos.",
+                            type="negative",
+                        )
 
                 senha.on("keydown.enter", entrar)
+                codigo_totp.on("keydown.enter", entrar)
                 ui.button("Entrar como Master", on_click=entrar).classes(
                     "erp-login-btn"
                 ).props("unelevated no-caps")
-                with ui.element("div").classes("erp-login-rodape-card"):
-                    ui.html(
-                        '<span class="erp-login-badge">Master</span>'
-                        "<code>master@plataforma.com</code>"
-                        '<span class="erp-login-sep">·</span>'
-                        "<code>master123</code>"
-                    )
+                if mostrar_credenciais_demo():
+                    with ui.element("div").classes("erp-login-rodape-card"):
+                        ui.html(
+                            '<span class="erp-login-badge">Master</span>'
+                            "<code>master@plataforma.com</code>"
+                            '<span class="erp-login-sep">·</span>'
+                            "<code>master123</code>"
+                        )
 
 
 # ------------------------------------------------------------ Dashboard

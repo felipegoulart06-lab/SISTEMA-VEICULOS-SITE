@@ -11,6 +11,14 @@ from loja.plataforma import (
     trocar_senha_tenant,
 )
 from loja.roteamento_host import erp_admin_url, erp_login_url, erp_trocar_senha_url
+from loja.seguranca import (
+    chave_login,
+    mensagem_bloqueio_login,
+    rate_limit_login,
+    secret_totp_master,
+    totp_obrigatorio_master,
+    verificar_totp,
+)
 from loja.tenant_ctx import ligar_tenant, limpar_tenant
 
 
@@ -35,13 +43,26 @@ def fazer_logout() -> None:
 
 def fazer_login(email: str, senha: str) -> bool:
     """Login da empresa: e-mail + senha do administrador único."""
+    ok, _ = tentar_login_empresa(email, senha)
+    return ok
+
+
+def tentar_login_empresa(email: str, senha: str) -> tuple[bool, str | None]:
+    """Login com rate limit. Retorna (sucesso, mensagem_erro)."""
     import time
+
+    chave = chave_login("empresa", email)
+    if rate_limit_login.bloqueado(chave):
+        return False, mensagem_bloqueio_login(chave)
 
     conta = autenticar_conta(email, senha)
     if not conta:
-        return False
-    for chave in ("master_id", "master_nome", "master_email", "impersonando"):
-        app.storage.user.pop(chave, None)
+        rate_limit_login.registrar_falha(chave)
+        return False, None
+
+    rate_limit_login.limpar(chave)
+    for chave_sess in ("master_id", "master_nome", "master_email", "impersonando"):
+        app.storage.user.pop(chave_sess, None)
     app.storage.user["usuario_id"] = conta.id
     app.storage.user["usuario_nome"] = conta.nome
     app.storage.user["usuario_email"] = conta.email
@@ -53,7 +74,7 @@ def fazer_login(email: str, senha: str) -> bool:
     app.storage.user["_acesso_check_em"] = time.time()
     app.storage.user["_acesso_ok"] = True
     ligar_tenant(conta.slug)
-    return True
+    return True, None
 
 
 def deve_trocar_senha() -> bool:
@@ -135,16 +156,36 @@ def master_nome() -> str:
     return app.storage.user.get("master_nome", "Master")
 
 
-def fazer_login_master(email: str, senha: str) -> bool:
+def fazer_login_master(email: str, senha: str, codigo_totp: str = "") -> bool:
+    ok, _ = tentar_login_master(email, senha, codigo_totp)
+    return ok
+
+
+def tentar_login_master(
+    email: str, senha: str, codigo_totp: str = "",
+) -> tuple[bool, str | None]:
+    chave = chave_login("master", email)
+    if rate_limit_login.bloqueado(chave):
+        return False, mensagem_bloqueio_login(chave)
+
     user = autenticar_master(email, senha)
     if not user:
-        return False
+        rate_limit_login.registrar_falha(chave)
+        return False, None
+
+    secret = getattr(user, "totp_secret", None)
+    if totp_obrigatorio_master(secret):
+        if not verificar_totp(secret_totp_master(secret), codigo_totp):
+            rate_limit_login.registrar_falha(chave)
+            return False, "Código 2FA inválido ou ausente."
+
+    rate_limit_login.limpar(chave)
     app.storage.user.clear()
     limpar_tenant()
     app.storage.user["master_id"] = user.id
     app.storage.user["master_nome"] = user.nome
     app.storage.user["master_email"] = user.email
-    return True
+    return True, None
 
 
 def fazer_logout_master() -> None:

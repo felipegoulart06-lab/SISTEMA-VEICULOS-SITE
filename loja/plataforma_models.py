@@ -29,6 +29,7 @@ class AdminMaster(PlataformaBase):
     senha_hash: Mapped[str] = mapped_column(String(200))
     nome: Mapped[str] = mapped_column(String(100), default="Administrador Master")
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    totp_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 

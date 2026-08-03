@@ -292,12 +292,16 @@ def _migrar_plataforma() -> None:
         "descricao": "VARCHAR(300) DEFAULT ''",
         "dias_licenca": "INTEGER DEFAULT 30",
     }
+    novas_admin_master = {
+        "totp_secret": "VARCHAR(64)",
+    }
 
     for tabela, colunas in (
         ("empresas", novas_empresas),
         ("contas", novas_empresas),  # legado SQLite
         ("config_plataforma", novas_config),
         ("planos", novas_planos),
+        ("admin_master", novas_admin_master),
     ):
         if tabela not in tabelas:
             continue
