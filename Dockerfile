@@ -20,7 +20,7 @@ RUN mkdir -p dados/storage dados/contas
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
     CMD curl -fsS "http://127.0.0.1:${PORT}/health" || exit 1
 
 CMD ["python", "main.py"]

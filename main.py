@@ -53,6 +53,32 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(HostContextMiddleware)
 
 validar_ambiente()
+
+
+def _log_startup() -> None:
+    from loja.db_config import database_url, usando_postgres
+
+    ambiente = os.getenv("AMBIENTE") or os.getenv("ENV") or "(nao definido)"
+    port = os.getenv("PORT", "8080")
+    chave = os.getenv("SECRET_KEY", "")
+    chave_ok = bool(chave) and chave != "sigma-erp-secret-change-in-production" and len(chave) >= 32
+    postgres = usando_postgres()
+    print(
+        f"[startup] AMBIENTE={ambiente} PORT={port} "
+        f"postgres={postgres} SECRET_KEY={'ok' if chave_ok else 'AUSENTE/FRACA'}"
+    )
+    if postgres:
+        url = database_url()
+        host = url.split("@")[-1].split("/")[0] if "@" in url else "?"
+        print(f"[startup] DB conectando em {host}")
+    else:
+        print(
+            "[startup] AVISO: SQLite local — defina DATABASE_URL ou SUPABASE_DB_* "
+            "no Easypanel e redeploy"
+        )
+
+
+_log_startup()
 init_db()
 
 CSS_SITE = "/static/estilo.css?v=22"
@@ -502,7 +528,11 @@ if __name__ in {"__main__", "__mp_main__"}:
         reload=False,
         host="0.0.0.0",
         port=port,
+        show_welcome_message=False,
+        uvicorn_logging_level="info",
         storage_secret=os.getenv(
             "SECRET_KEY", "sigma-erp-secret-change-in-production",
         ),
+        proxy_headers=True,
+        forwarded_allow_ips="*",
     )
