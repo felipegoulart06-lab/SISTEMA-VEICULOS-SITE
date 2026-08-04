@@ -20,7 +20,5 @@ RUN mkdir -p dados/storage dados/contas
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
-    CMD curl -fsS "http://127.0.0.1:${PORT}/health" || exit 1
-
-CMD ["python", "main.py"]
+# Um único worker uvicorn (PID 1) — evita processos duplicados e restart loop
+CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1 --proxy-headers --forwarded-allow-ips '*' --log-level info"]

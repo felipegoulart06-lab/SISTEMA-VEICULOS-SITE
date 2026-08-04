@@ -33,6 +33,7 @@ from loja.roteamento_host import (
 from loja.seguranca import SecurityHeadersMiddleware, validar_ambiente
 from loja.spa_site import CSS_LAYOUT_FIX, montar_site_spa
 from loja.tenant_ctx import ligar_tenant, site_url
+from nicegui.storage import set_storage_secret
 
 STATIC = Path(__file__).resolve().parent / "loja" / "static"
 STORAGE = Path(__file__).resolve().parent / "dados" / "storage"
@@ -53,6 +54,9 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(HostContextMiddleware)
 
 validar_ambiente()
+set_storage_secret(
+    os.getenv("SECRET_KEY", "sigma-erp-secret-change-in-production"),
+)
 
 
 def _log_startup() -> None:
@@ -520,7 +524,7 @@ def rota_erp_spa(resto: str = "") -> None:
     montar_erp_spa(rota)
 
 
-if __name__ in {"__main__", "__mp_main__"}:
+if __name__ == "__main__":
     port = int(os.getenv("PORT", "8080"))
     ui.run(
         title="Plataforma White Label — Gestão Veículos",
