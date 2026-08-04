@@ -20,5 +20,5 @@ RUN mkdir -p dados/storage dados/contas
 
 EXPOSE 8080
 
-# Um único worker uvicorn (PID 1) — evita processos duplicados e restart loop
-CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1 --proxy-headers --forwarded-allow-ips '*' --log-level info"]
+# NiceGUI exige ui.run() — nao usar uvicorn main:app direto
+CMD ["python", "-u", "main.py"]
