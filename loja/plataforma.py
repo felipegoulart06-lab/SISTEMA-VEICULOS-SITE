@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 
 from dotenv import load_dotenv
 from passlib.hash import pbkdf2_sha256
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import create_engine, func, or_, select, text
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session, sessionmaker
 
