@@ -1,0 +1,69 @@
+{% extends "site/base.html" %}
+{% block content %}
+<div class="pagina-topo-institucional">
+  <h1>FALE CONOSCO</h1>
+  <p class="pagina-topo-sub">Estamos prontos para ajudar você a realizar o melhor negócio</p>
+</div>
+{% if mensagem %}
+<p class="alerta-sucesso">{{ mensagem }}</p>
+{% endif %}
+{% if erro %}
+<p class="alerta-erro">{{ erro }}</p>
+{% endif %}
+<div class="contato-layout corpo-institucional-wrap">
+  <div class="contato-form-col">
+    <h2 class="contato-secao-titulo">Envie sua mensagem</h2>
+    <form method="post" action="{{ url('/contato') }}" class="form-avaliacao contato-form form-site">
+      <label>Nome completo
+        <input type="text" name="nome" required maxlength="120" value="{{ form.nome or '' }}">
+      </label>
+      <div class="form-grid">
+        <label>E-mail
+          <input type="email" name="email" maxlength="120" value="{{ form.email or '' }}">
+        </label>
+        <label>Telefone / WhatsApp
+          <input type="tel" name="telefone" required maxlength="30" value="{{ form.telefone or '' }}">
+        </label>
+      </div>
+      <label>Assunto
+        <select name="assunto" required>
+          {% for a in assuntos %}
+          <option value="{{ a }}"{% if form.assunto == a %} selected{% endif %}>{{ a }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Mensagem
+        <textarea name="mensagem" rows="5" required maxlength="4000">{{ form.mensagem or '' }}</textarea>
+      </label>
+      <button type="submit" class="btn btn-preto btn-enviar-avaliacao">Enviar mensagem</button>
+    </form>
+  </div>
+  <div class="contato-info-col">
+    <h2 class="contato-secao-titulo">Canais de atendimento</h2>
+    {% if loja.telefone %}
+    <article class="contato-card-info"><span class="material-icons">call</span><div><strong>Telefone</strong><span>{{ loja.telefone }}</span></div></article>
+    {% endif %}
+    {% if loja.whatsapp %}
+    <article class="contato-card-info"><span class="material-icons">chat</span><div><strong>WhatsApp</strong><span>{{ loja.whatsapp }}</span></div></article>
+    {% endif %}
+    {% if loja.email %}
+    <article class="contato-card-info"><span class="material-icons">mail</span><div><strong>E-mail</strong><span>{{ loja.email }}</span></div></article>
+    {% endif %}
+    {% if loja.horario %}
+    <article class="contato-card-info"><span class="material-icons">schedule</span><div><strong>Horário</strong><span>{{ loja.horario }}</span></div></article>
+    {% endif %}
+    {% if loja.endereco %}
+    <article class="contato-card-info"><span class="material-icons">place</span><div><strong>Endereço</strong><span>{{ loja.endereco }}</span></div></article>
+    {% endif %}
+    <div class="contato-acoes-rapidas">
+      {% if wa_link %}
+      <a href="{{ wa_link }}" class="btn btn-preto" target="_blank" rel="noopener">Chamar no WhatsApp</a>
+      {% endif %}
+      {% if loja.email %}
+      <a href="mailto:{{ loja.email }}" class="btn btn-contorno">Enviar e-mail</a>
+      {% endif %}
+    </div>
+    <div class="contato-dados-legais">{{ bloco_empresa|safe }}</div>
+  </div>
+</div>
+{% endblock %}

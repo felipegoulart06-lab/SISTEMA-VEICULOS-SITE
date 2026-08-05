@@ -1,3 +1,5 @@
+import html
+
 from nicegui import ui
 
 from loja.auth import (
@@ -7,8 +9,11 @@ from loja.auth import (
     tentar_login_empresa,
 )
 from loja.plataforma import motivo_bloqueio
+from loja.repositorio import config_como_dict
 from loja.roteamento_host import erp_admin_url, erp_trocar_senha_url, get_contexto_host
 from loja.seguranca import mostrar_credenciais_demo
+from loja.tenant_ctx import ligar_tenant
+from loja.whitelabel import aplicar_marca_navegador, titulo_aba_erp
 
 
 def pagina_login() -> None:
@@ -24,9 +29,20 @@ def pagina_login() -> None:
         "<style>:root { --erp-accent: #c0392b; --erp-accent-hover: #a93226; }</style>"
     )
 
+    ctx = get_contexto_host()
+    marca_erp = "Gestão Veículos"
+    if ctx.modo == "erp" and ctx.slug:
+        ligar_tenant(ctx.slug)
+        cfg = config_como_dict()
+        aplicar_marca_navegador(cfg)
+        marca_erp = titulo_aba_erp(cfg)
+
     with ui.element("div").classes("erp-login-page erp-login-empresa"):
         with ui.element("div").classes("erp-login-brand"):
-            ui.html('<div class="erp-login-brand-logo">Gestão Veículos</div>')
+            ui.html(
+                f'<div class="erp-login-brand-logo">'
+                f"{html.escape(marca_erp)}</div>"
+            )
             ui.html('<p class="erp-login-brand-loja">ERP das lojas</p>')
             ui.html(
                 '<ul class="erp-login-features">'

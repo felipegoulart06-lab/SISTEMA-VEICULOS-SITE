@@ -154,9 +154,34 @@ def filtrar_veiculos(
     marca: str | None = None,
     busca: str = "",
     apenas_disponiveis: bool = True,
+    limite: int | None = None,
 ) -> list[Veiculo]:
+    from sqlalchemy.orm import load_only
+
     with get_session() as db:
         q = select(VeiculoDB)
+        if limite:
+            q = q.options(
+                load_only(
+                    VeiculoDB.id,
+                    VeiculoDB.marca,
+                    VeiculoDB.modelo,
+                    VeiculoDB.ano,
+                    VeiculoDB.km,
+                    VeiculoDB.combustivel,
+                    VeiculoDB.cambio,
+                    VeiculoDB.preco,
+                    VeiculoDB.imagem,
+                    VeiculoDB.imagem_destaque,
+                    VeiculoDB.destaque,
+                    VeiculoDB.status,
+                    VeiculoDB.publicado,
+                    VeiculoDB.cor,
+                    VeiculoDB.tipo,
+                    VeiculoDB.badge,
+                    VeiculoDB.custo,
+                )
+            )
         if apenas_disponiveis:
             q = q.where(
                 VeiculoDB.status == "disponivel",
@@ -164,7 +189,10 @@ def filtrar_veiculos(
             )
         if marca:
             q = q.where(VeiculoDB.marca == marca)
-        rows = db.scalars(q.order_by(VeiculoDB.destaque.desc(), VeiculoDB.id)).all()
+        q = q.order_by(VeiculoDB.destaque.desc(), VeiculoDB.id)
+        if limite:
+            q = q.limit(limite)
+        rows = db.scalars(q).all()
         resultado = [_to_veiculo(v) for v in rows]
         if busca.strip():
             termo = busca.strip().lower()
@@ -185,6 +213,48 @@ def listar_todos_veiculos() -> list[VeiculoDB]:
         for r in rows:
             db.expunge(r)
         return list(rows)
+
+
+LIMITE_LISTAGEM_ERP = 500
+
+
+def listar_veiculos_resumo(limite: int = LIMITE_LISTAGEM_ERP) -> list[VeiculoDB]:
+    """Campos mínimos para tabelas — evita TEXT pesados no WebSocket."""
+    from sqlalchemy.orm import load_only
+
+    with get_session() as db:
+        rows = db.scalars(
+            select(VeiculoDB)
+            .options(
+                load_only(
+                    VeiculoDB.id,
+                    VeiculoDB.marca,
+                    VeiculoDB.modelo,
+                    VeiculoDB.placa,
+                    VeiculoDB.ano,
+                    VeiculoDB.preco,
+                    VeiculoDB.status,
+                    VeiculoDB.publicado,
+                    VeiculoDB.destaque,
+                )
+            )
+            .order_by(VeiculoDB.id.desc())
+            .limit(limite)
+        ).all()
+        for r in rows:
+            db.expunge(r)
+        return list(rows)
+
+
+def listar_veiculos_opcoes(limite: int = LIMITE_LISTAGEM_ERP) -> dict[int, str]:
+    """Mapa id → rótulo para selects e kanban."""
+    with get_session() as db:
+        rows = db.execute(
+            select(VeiculoDB.id, VeiculoDB.marca, VeiculoDB.modelo)
+            .order_by(VeiculoDB.id.desc())
+            .limit(limite)
+        ).all()
+        return {r.id: f"{r.marca} {r.modelo}" for r in rows}
 
 
 def obter_veiculo(veiculo_id: int) -> VeiculoDB | None:
@@ -350,10 +420,10 @@ def filtrar_estoque(f: FiltrosEstoque) -> tuple[list[Veiculo], int]:
         return resultado[inicio:inicio + ITENS_POR_PAGINA], total
 
 
-def listar_leads() -> list[Lead]:
+def listar_leads(limite: int = 300) -> list[Lead]:
     with get_session() as db:
         rows = db.scalars(
-            select(Lead).order_by(Lead.criado_em.desc())
+            select(Lead).order_by(Lead.criado_em.desc()).limit(limite)
         ).all()
         for r in rows:
             db.expunge(r)

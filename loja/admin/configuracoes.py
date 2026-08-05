@@ -20,15 +20,21 @@ def pagina_configuracoes() -> None:
                 "<span>Identidade do sistema (ERP)</span></div>"
             )
             nome_sistema = ui.input(
-                "Nome global do sistema",
+                "Título da aba do ERP",
                 value=cfg.nome_sistema,
-                placeholder="Ex: AutoGestão, Minha Loja ERP",
+                placeholder="Ex: Rodavia ERP, AutoGestão",
+            ).classes("erp-input-full")
+            favicon = ui.input(
+                "Favicon (URL da imagem)",
+                value=getattr(cfg, "favicon_url", "") or "",
+                placeholder="https://minhaloja.com.br/favicon.ico",
             ).classes("erp-input-full")
             cor = ui.input(
                 "Cor primária (hex)", value=cfg.cor_primaria
             ).classes("erp-input-full")
             ui.label(
-                "Aparece no menu lateral, login e destaques do site."
+                "O título e o favicon aparecem na aba do navegador ao usar o ERP. "
+                "No site público, o favicon é o mesmo; o título do site fica em Site."
             ).classes("erp-ajuda")
 
         with ui.element("div").classes("erp-config-grid"):
@@ -136,6 +142,7 @@ def pagina_configuracoes() -> None:
     def salvar() -> None:
         salvar_config({
             "nome_sistema": nome_sistema.value.strip() or "Gestão Veículos",
+            "favicon_url": favicon.value.strip(),
             "cor_primaria": cor.value.strip() or "#c0392b",
             "nome": nome.value.strip(),
             "razao_social": razao.value.strip(),

@@ -15,7 +15,7 @@ from loja.repositorio import (
     excluir_lead,
     listar_campanhas,
     listar_leads,
-    listar_todos_veiculos,
+    listar_veiculos_opcoes,
     salvar_lead,
 )
 
@@ -35,7 +35,7 @@ def pagina_leads() -> None:
     @ui.refreshable
     def kanban() -> None:
         leads = listar_leads()
-        veiculos = {v.id: f"{v.marca} {v.modelo}" for v in listar_todos_veiculos()}
+        veiculos = listar_veiculos_opcoes()
         por_status: dict[str, list] = {s: [] for s in STATUS_LEAD}
         for l in leads:
             st = l.status if l.status in por_status else "novo"
@@ -194,8 +194,7 @@ def pagina_leads() -> None:
 
     def novo_lead() -> None:
         veiculos_opts = {None: "— Nenhum —"}
-        for v in listar_todos_veiculos():
-            veiculos_opts[v.id] = f"{v.marca} {v.modelo}"
+        veiculos_opts.update(listar_veiculos_opcoes())
         campanhas_opts = {None: "— Nenhuma —"}
         for c in listar_campanhas():
             campanhas_opts[c.id] = c.nome

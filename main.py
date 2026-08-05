@@ -1,6 +1,10 @@
 import os
 from pathlib import Path
 
+from loja.runtime_nicegui import preparar_runtime
+
+preparar_runtime()
+
 from nicegui import app, ui
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -19,7 +23,7 @@ from loja.componentes import (
 from loja.database import init_db
 from loja.pagina_conteudo import montar_pagina_conteudo, obter_pagina
 from loja.pagina_detalhe import montar_pagina_detalhe
-from loja.plataforma import listar_contas, obter_conta_por_slug
+from loja.plataforma import aquecer_cache_dominios, listar_contas, obter_conta_por_slug
 from loja.repositorio import (
     FiltrosEstoque,
     config_como_dict,
@@ -31,8 +35,10 @@ from loja.roteamento_host import (
     set_contexto_host,
 )
 from loja.seguranca import SecurityHeadersMiddleware, validar_ambiente
+from loja.site_middleware import SiteHtmlMiddleware
 from loja.spa_site import CSS_LAYOUT_FIX, montar_site_spa
 from loja.tenant_ctx import ligar_tenant, site_url
+from loja.whitelabel import html_favicon
 
 STATIC = Path(__file__).resolve().parent / "loja" / "static"
 STORAGE = Path(__file__).resolve().parent / "dados" / "storage"
@@ -50,6 +56,7 @@ class HostContextMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(SiteHtmlMiddleware)
 app.add_middleware(HostContextMiddleware)
 
 validar_ambiente()
@@ -80,6 +87,7 @@ def _log_startup() -> None:
 
 _log_startup()
 init_db()
+aquecer_cache_dominios()
 
 CSS_SITE = "/static/estilo.css?v=22"
 
@@ -97,7 +105,7 @@ def ativar_loja(slug: str) -> bool:
     return True
 
 
-def _head_site(titulo: str, descricao: str = "") -> None:
+def _head_site(titulo: str, descricao: str = "", cfg: dict | None = None) -> None:
     ui.add_head_html(
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
     )
@@ -107,7 +115,11 @@ def _head_site(titulo: str, descricao: str = "") -> None:
         '<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">'
     )
     injetar_tema()
-    ui.add_head_html(f"<title>{titulo}</title>")
+    ui.page_title(titulo)
+    if cfg:
+        fav = html_favicon(cfg)
+        if fav:
+            ui.add_head_html(fav)
     if descricao:
         ui.add_head_html(f'<meta name="description" content="{descricao}">')
 
@@ -244,7 +256,7 @@ def pagina_veiculo_loja(slug: str, veiculo_id: int) -> None:
     cfg = config_como_dict()
     v = obter_veiculo_publico(veiculo_id)
     if v is None:
-        _head_site(f"{cfg['nome']} — Veículo não encontrado")
+        _head_site(f"{cfg['nome']} — Veículo não encontrado", cfg=cfg)
         barra_social()
         cabecalho(lambda _: None)
         with ui.element("div").classes("pagina-detalhe-erro"):
@@ -253,7 +265,7 @@ def pagina_veiculo_loja(slug: str, veiculo_id: int) -> None:
         encerrar_pagina_site()
         return
 
-    _head_site(f"{v.marca} {v.modelo} {v.ano} — {cfg['nome']}")
+    _head_site(f"{v.marca} {v.modelo} {v.ano} — {cfg['nome']}", cfg=cfg)
 
     def buscar_detalhe(texto: str) -> None:
         filtros = _filtros_estoque()
@@ -325,6 +337,7 @@ def _pagina_conteudo_loja(slug: str, pagina_slug: str) -> None:
     _head_site(
         f"{cfg['nome']} — {titulo}",
         pagina.seo_descricao if pagina else "",
+        cfg=cfg,
     )
     barra_social()
     cabecalho(lambda _: None)
@@ -454,7 +467,7 @@ def rota_veiculo_host(veiculo_id: int) -> None:
     cfg = config_como_dict()
     v = obter_veiculo_publico(veiculo_id)
     if v is None:
-        _head_site(f"{cfg['nome']} — Veículo não encontrado")
+        _head_site(f"{cfg['nome']} — Veículo não encontrado", cfg=cfg)
         barra_social()
         cabecalho(lambda _: None)
         with ui.element("div").classes("pagina-detalhe-erro"):
@@ -462,7 +475,7 @@ def rota_veiculo_host(veiculo_id: int) -> None:
             ui.link("Ver estoque", site_url("/estoque")).classes("btn btn-preto")
         encerrar_pagina_site()
         return
-    _head_site(f"{v.marca} {v.modelo} {v.ano} — {cfg['nome']}")
+    _head_site(f"{v.marca} {v.modelo} {v.ano} — {cfg['nome']}", cfg=cfg)
 
     def buscar_detalhe(texto: str) -> None:
         filtros = _filtros_estoque()
@@ -523,16 +536,19 @@ def rota_erp_spa(resto: str = "") -> None:
 if __name__ in {"__main__", "__mp_main__"}:
     port = int(os.getenv("PORT", "8080"))
     ui.run(
-        title="Plataforma White Label — Gestão Veículos",
-        favicon="🚗",
+        title="Gestão Veículos",
+        favicon="",
         reload=False,
         host="0.0.0.0",
         port=port,
         show_welcome_message=False,
-        uvicorn_logging_level="info",
+        uvicorn_logging_level="warning",
+        prod_js=True,
         storage_secret=os.getenv(
             "SECRET_KEY", "sigma-erp-secret-change-in-production",
         ),
         proxy_headers=True,
         forwarded_allow_ips="*",
+        reconnect_timeout=30.0,
+        message_history_length=0,
     )

@@ -2,8 +2,11 @@
 
 from nicegui import app, ui
 
-from loja.auth import concluir_troca_senha, deve_trocar_senha, logado
+from loja.auth import concluir_troca_senha, conta_slug, deve_trocar_senha, logado
+from loja.repositorio import config_como_dict
 from loja.roteamento_host import erp_admin_url, erp_login_url
+from loja.tenant_ctx import ligar_tenant
+from loja.whitelabel import aplicar_marca_navegador
 
 
 def pagina_trocar_senha() -> None:
@@ -19,6 +22,10 @@ def pagina_trocar_senha() -> None:
     if not logado():
         ui.navigate.to(erp_login_url())
         return
+    slug = conta_slug()
+    if slug:
+        ligar_tenant(slug)
+        aplicar_marca_navegador(config_como_dict())
     if not deve_trocar_senha():
         ui.navigate.to(erp_admin_url())
         return

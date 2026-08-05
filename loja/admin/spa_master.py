@@ -29,8 +29,8 @@ ROTAS_MASTER: dict[str, Callable] = {
     "/master/configuracoes": pagina_master_config,
 }
 
-TTL_PAINEL = 3600.0
-PREFETCH = tuple(ROTAS_MASTER.keys())
+TTL_PAINEL = 600.0
+MAX_PAINEIS_CACHE = 3
 
 
 def normalizar_rota_master(path: str | None) -> str:
@@ -104,6 +104,23 @@ def montar_master_spa(rota_inicial: str = "/master") -> None:
             if el is not None:
                 el.set_visibility(False)
 
+    def _evictar_paineis(destino: str) -> None:
+        reservados = {destino, "loading"}
+        while len(paineis) > MAX_PAINEIS_CACHE:
+            candidatos = [
+                (k, v) for k, v in paineis.items() if k not in reservados
+            ]
+            if not candidatos:
+                break
+            chave, info = min(candidatos, key=lambda x: x[1].get("ts", 0))
+            el = info.get("el")
+            if el is not None:
+                try:
+                    el.delete()
+                except Exception:
+                    pass
+            paineis.pop(chave, None)
+
     def _montar_painel(destino: str, visivel: bool = True) -> None:
         host = host_ref["el"]
         if host is None:
@@ -122,6 +139,7 @@ def montar_master_spa(rota_inicial: str = "/master") -> None:
                 fn = ROTAS_MASTER.get(destino, pagina_master_dashboard)
                 fn()
             paineis[destino] = {"el": painel, "ts": time.monotonic()}
+        _evictar_paineis(destino)
 
     def _mostrar(destino: str, forcar: bool = False) -> None:
         agora = time.monotonic()
@@ -243,20 +261,3 @@ def montar_master_spa(rota_inicial: str = "/master") -> None:
             with host_ref["el"]:
                 pass
             _mostrar(estado["rota"], forcar=True)
-
-    fila = [r for r in PREFETCH if r != estado["rota"]]
-
-    def _prefetch_proximo() -> None:
-        while fila:
-            rota = fila.pop(0)
-            if rota in paineis or rota == estado["rota"]:
-                continue
-            try:
-                _montar_painel(rota, visivel=False)
-            except Exception:
-                pass
-            if fila:
-                ui.timer(0.2, _prefetch_proximo, once=True)
-            return
-
-    ui.timer(0.3, _prefetch_proximo, once=True)

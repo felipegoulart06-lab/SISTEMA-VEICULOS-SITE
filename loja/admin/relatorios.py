@@ -11,7 +11,7 @@ from loja.crm_repo import (
     relatorio_vendas,
     resumo_financeiro,
 )
-from loja.repositorio import formatar_preco, listar_todos_veiculos
+from loja.repositorio import formatar_preco, listar_veiculos_resumo
 
 
 def pagina_relatorios() -> None:
@@ -100,7 +100,7 @@ def pagina_relatorios() -> None:
             ).props("flat")
 
         with ui.tab_panel(t4):
-            for v in listar_todos_veiculos():
+            for v in listar_veiculos_resumo()[:200]:
                 ui.html(
                     f'<div class="erp-resumo-item">'
                     f"<span>{v.marca} {v.modelo} {v.ano}</span>"

@@ -9,7 +9,12 @@ from loja.crm_repo import (
     obter_proposta,
     salvar_proposta,
 )
-from loja.repositorio import config_como_dict, formatar_preco, listar_todos_veiculos
+from loja.repositorio import (
+    config_como_dict,
+    formatar_preco,
+    listar_veiculos_opcoes,
+    obter_veiculo,
+)
 
 
 def pagina_propostas() -> None:
@@ -24,7 +29,7 @@ def pagina_propostas() -> None:
     @ui.refreshable
     def tabela() -> None:
         props = listar_propostas()
-        veiculos = {v.id: f"{v.marca} {v.modelo}" for v in listar_todos_veiculos()}
+        veiculos = listar_veiculos_opcoes()
         colunas = [
             {"name": "id", "label": "#", "field": "id"},
             {"name": "cliente", "label": "Cliente", "field": "cliente"},
@@ -82,10 +87,9 @@ def pagina_propostas() -> None:
         loja = config_como_dict()
         veiculo = "—"
         if p.veiculo_id:
-            for v in listar_todos_veiculos():
-                if v.id == p.veiculo_id:
-                    veiculo = f"{v.marca} {v.modelo} {v.ano}"
-                    break
+            v = obter_veiculo(p.veiculo_id)
+            if v:
+                veiculo = f"{v.marca} {v.modelo} {v.ano}"
         html = f"""
         <div class="doc-print">
             <h2>PROPOSTA COMERCIAL</h2>
@@ -111,9 +115,7 @@ def pagina_propostas() -> None:
         p = obter_proposta(proposta_id) if proposta_id else None
         clientes = {c.id: c.nome for c in listar_clientes()}
         clientes_opts = {None: "— Digite o nome abaixo —", **clientes}
-        veiculos = {None: "— Nenhum —"}
-        for v in listar_todos_veiculos():
-            veiculos[v.id] = f"{v.marca} {v.modelo}"
+        veiculos = {None: "— Nenhum —", **listar_veiculos_opcoes()}
 
         with ui.dialog() as dlg, ui.card().classes("erp-dialog erp-dialog-wide"):
             ui.label("Editar proposta" if p else "Nova proposta").classes(

@@ -11,7 +11,7 @@ from loja.crm_repo import (
     resumo_financeiro,
     salvar_lancamento,
 )
-from loja.repositorio import formatar_preco, listar_todos_veiculos
+from loja.repositorio import formatar_preco, listar_veiculos_opcoes, listar_veiculos_resumo
 
 
 def pagina_financeiro() -> None:
@@ -103,7 +103,7 @@ def pagina_financeiro() -> None:
 
     def novo() -> None:
         veiculos = {None: "— Nenhum —"}
-        for v in listar_todos_veiculos():
+        for v in listar_veiculos_resumo():
             veiculos[v.id] = f"{v.marca} {v.modelo}"
         with ui.dialog() as dlg, ui.card().classes("erp-dialog erp-dialog-wide"):
             ui.label("Novo lançamento").classes("erp-dialog-titulo")

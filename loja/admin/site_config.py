@@ -55,7 +55,9 @@ def pagina_site() -> None:
                 "Instagram", value=cfg.get("instagram", ""),
             ).props("outlined dense")
             seo_titulo = ui.input(
-                "SEO — título", value=cfg.get("seo_titulo", ""),
+                "Título da aba do site",
+                value=cfg.get("seo_titulo", ""),
+                placeholder="Ex: Rodavia Multimarcas",
             ).props("outlined dense").classes("erp-form-full")
             dominio = ui.input(
                 "Domínio (informativo)",
@@ -71,8 +73,8 @@ def pagina_site() -> None:
             ).props("outlined dense").classes("erp-form-full")
 
         ui.html(
-            '<p class="erp-ajuda">Domínio customizado e integrações avançadas '
-            "entram numa próxima etapa.</p>"
+            '<p class="erp-ajuda">Favicon da loja: configure em '
+            "<strong>Configurações → Identidade do sistema</strong>.</p>"
         )
 
         def salvar():

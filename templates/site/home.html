@@ -1,0 +1,83 @@
+{% extends "site/base.html" %}
+{% block content %}
+<div class="site-root">
+  <div class="banner">
+    <img src="{{ banner_url }}" alt="Banner {{ loja.nome }}" loading="eager">
+  </div>
+  <div class="corpo-site">
+    <main>
+      <aside class="sidebar-marcas">
+        <h2>SHOWROOM / MARCAS</h2>
+        <ul class="lista-marcas">
+          <li><a href="{{ url('/') }}" class="todas{% if not marca_atual %} ativo{% endif %}">TODAS AS MARCAS</a></li>
+          {% for m in marcas %}
+          <li><a href="{{ url('/?marca=' ~ m|urlencode) }}" class="{% if marca_atual == m %}ativo{% endif %}">{{ m }}</a></li>
+          {% endfor %}
+        </ul>
+      </aside>
+      <div style="flex:1">
+        {% if destaque %}
+        <article class="card-destaque">
+          <a href="{{ url('/veiculo/' ~ destaque.id) }}" class="foto">
+            <img src="{{ destaque.imagem_destaque or destaque.imagem }}" alt="{{ destaque.marca }} {{ destaque.modelo }}" loading="lazy">
+          </a>
+          <div class="info">
+            <h3>{{ destaque.marca }} {{ destaque.modelo }}</h3>
+            <div class="specs-destaque">
+              <span>📅 {{ destaque.ano }}</span>
+              <span>🛣 {{ destaque.km_fmt }}</span>
+              <span>⛽ {{ destaque.combustivel }}</span>
+              <span>⚙ {{ destaque.cambio }}</span>
+            </div>
+            <div class="preco-destaque">{{ destaque.preco_fmt }}</div>
+            <div class="botoes-destaque">
+              <a href="{{ url('/veiculo/' ~ destaque.id) }}" class="btn btn-preto">VER DETALHES</a>
+            </div>
+          </div>
+        </article>
+        {% endif %}
+        <div class="grade-veiculos">
+          {% for v in veiculos %}
+          <article class="card-veiculo">
+            <a href="{{ url('/veiculo/' ~ v.id) }}" class="foto">
+              <img src="{{ v.imagem }}" alt="{{ v.marca }} {{ v.modelo }}" loading="lazy">
+            </a>
+            <div class="corpo">
+              <h4>{{ v.marca }} {{ v.modelo }} {{ v.ano }}</h4>
+              <div class="preco">{{ v.preco_fmt }}</div>
+              <div class="specs">{{ v.cambio }}, {{ v.combustivel }}, {{ v.km_fmt }}</div>
+              <div class="botoes-card">
+                <a href="{{ url('/veiculo/' ~ v.id) }}" class="btn btn-preto">VER DETALHES</a>
+              </div>
+            </div>
+          </article>
+          {% else %}
+          <p class="sem-resultado">Nenhum veículo disponível no momento.</p>
+          {% endfor %}
+        </div>
+        <a href="{{ url('/estoque') }}" class="btn-estoque-completo btn btn-preto">Ver estoque completo</a>
+      </div>
+    </main>
+  </div>
+  {% if depoimentos %}
+  <section class="secao-depoimentos">
+    <h2>O que dizem nossos clientes</h2>
+    <div class="depoimentos-grade">
+      {% for d in depoimentos %}
+      <blockquote class="depoimento-card">
+        <p>“{{ d.texto }}”</p>
+        <footer>{{ '★' * d.nota }} — {{ d.nome }}</footer>
+      </blockquote>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+  {% if loja.sobre %}
+  <section class="secao-sobre">
+    <h2>Sobre a {{ loja.nome }}{% if loja.cidade %}, {{ loja.cidade }}{% endif %}</h2>
+    <p>{{ loja.sobre }}</p>
+    <a href="{{ url('/empresa') }}" class="secao-sobre-link">Conheça nossa história →</a>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

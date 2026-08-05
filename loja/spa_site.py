@@ -34,9 +34,39 @@ from loja.repositorio import (
     veiculo_destaque,
 )
 from loja.tenant_ctx import ligar_tenant, resolver_link_site, site_url
+from loja.whitelabel import html_favicon, titulo_aba_site
 
-CSS_SITE = "/static/estilo.css?v=22"
-TTL_PAINEL = 1800.0
+CSS_SITE = "/static/estilo.css?v=23"
+TTL_PAINEL = 600.0
+MAX_PAINEIS_SITE = 2
+HOME_LIMITE_VEICULOS = 18
+
+SPLASH_SITE = """
+<style>
+#sigma-splash{position:fixed;inset:0;z-index:99999;background:#fff;display:flex;
+flex-direction:column;align-items:center;justify-content:center;gap:12px;
+font-family:system-ui,Segoe UI,sans-serif;color:#555}
+#sigma-splash .sigma-spin{width:36px;height:36px;border:3px solid #e5e7eb;
+border-top-color:#c0392b;border-radius:50%;animation:sigma-spin .8s linear infinite}
+@keyframes sigma-spin{to{transform:rotate(360deg)}}
+</style>
+<script>
+(function(){
+  function splash(){
+    if(document.getElementById('sigma-splash')) return;
+    var d=document.createElement('div'); d.id='sigma-splash';
+    d.innerHTML='<div class="sigma-spin"></div><p>Carregando loja…</p>';
+    (document.body||document.documentElement).appendChild(d);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',splash);
+  else splash();
+  new MutationObserver(function(){
+    if(document.querySelector('.site-root,.cabecalho-principal,.barra-social'))
+      document.getElementById('sigma-splash')?.remove();
+  }).observe(document.documentElement,{childList:true,subtree:true});
+})();
+</script>
+"""
 
 # NiceGUI 3.x usa CSS layers — override precisa estar em @layer overrides
 CSS_LAYOUT_FIX = """
@@ -187,7 +217,8 @@ def _salvar_filtros_estoque(filtros: FiltrosEstoque) -> None:
         pass
 
 
-def _head_site(titulo: str, descricao: str = "") -> None:
+def _head_site(titulo: str, descricao: str = "", cfg: dict | None = None) -> None:
+    ui.add_head_html(SPLASH_SITE)
     ui.add_head_html(
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
     )
@@ -197,7 +228,11 @@ def _head_site(titulo: str, descricao: str = "") -> None:
         '<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">'
     )
     injetar_tema()
-    ui.add_head_html(f"<title>{titulo}</title>")
+    ui.page_title(titulo)
+    if cfg:
+        fav = html_favicon(cfg)
+        if fav:
+            ui.add_head_html(fav)
     if descricao:
         ui.add_head_html(f'<meta name="description" content="{descricao}">')
 
@@ -219,12 +254,12 @@ def montar_site_spa(
     nav_refs: dict[str, object] = {}
     carregando_ref: dict = {"el": None}
     estoque_ui: dict = {}
-    prefetch_fila: list[str] = []
     financ_ctx = dict(financ_kwargs or {})
 
     _head_site(
-        cfg.get("seo_titulo") or f"{cfg['nome']} — Estoque",
+        titulo_aba_site(cfg),
         cfg.get("seo_descricao") or "",
+        cfg=cfg,
     )
 
     def _url_abs(destino: str) -> str:
@@ -274,7 +309,8 @@ def montar_site_spa(
         def listagem() -> None:
             filtros = _filtros_home()
             veiculos = filtrar_veiculos(
-                filtros.get("marca"), filtros.get("busca") or ""
+                filtros.get("marca"), filtros.get("busca") or "",
+                limite=HOME_LIMITE_VEICULOS,
             )
             destaque = veiculo_destaque(veiculos)
             grade = [v for v in veiculos if destaque and v.id != destaque.id]
@@ -357,6 +393,23 @@ def montar_site_spa(
         "/avaliacao": _montar_avaliacao,
     }
 
+    def _evictar_paineis(destino: str) -> None:
+        reservados = {destino, "loading"}
+        while len(paineis) > MAX_PAINEIS_SITE:
+            candidatos = [
+                (k, v) for k, v in paineis.items() if k not in reservados
+            ]
+            if not candidatos:
+                break
+            chave, info = min(candidatos, key=lambda x: x[1].get("ts", 0))
+            el = info.get("el")
+            if el is not None:
+                try:
+                    el.delete()
+                except Exception:
+                    pass
+            paineis.pop(chave, None)
+
     def _montar_painel(destino: str, visivel: bool = True) -> None:
         host = host_ref["el"]
         if host is None:
@@ -374,6 +427,7 @@ def montar_site_spa(
             with painel:
                 BUILDERS.get(destino, _montar_home)()
             paineis[destino] = {"el": painel, "ts": time.monotonic()}
+        _evictar_paineis(destino)
 
     def _mostrar(destino: str, forcar: bool = False) -> None:
         agora = time.monotonic()
@@ -470,35 +524,23 @@ def montar_site_spa(
             carregando_ref["el"] = ui.element("div").classes("site-spa-carregando")
             with carregando_ref["el"]:
                 ui.html('<p class="site-spa-carregando-txt">Carregando…</p>')
-            carregando_ref["el"].set_visibility(False)
 
-        _mostrar(estado["rota"], forcar=True)
         _marcar_ativo(estado["rota"])
         rodape()
 
-    # Flutuantes fora do root — evita stretch virar faixa na tela
-    barra_lateral_site(avaliacao_spa=ir)
+    def _carregar_flutuantes() -> None:
+        barra_lateral_site(avaliacao_spa=ir)
 
-    vistos: set[str] = set()
-    for _, href in MENU:
-        if href != estado["rota"] and href in ROTAS_SITE and href not in vistos:
-            vistos.add(href)
-            prefetch_fila.append(href)
-    if "/avaliacao" != estado["rota"] and "/avaliacao" not in vistos:
-        prefetch_fila.append("/avaliacao")
+    def _carregar_conteudo_inicial() -> None:
+        try:
+            _mostrar(estado["rota"], forcar=True)
+        except Exception:
+            if carregando_ref["el"] is not None:
+                carregando_ref["el"].set_visibility(True)
 
-    def _prefetch_proximo() -> None:
-        while prefetch_fila:
-            rota = prefetch_fila.pop(0)
-            if rota in paineis or rota == estado["rota"]:
-                continue
-            try:
-                _montar_painel(rota, visivel=False)
-            except Exception:
-                pass
-            if prefetch_fila:
-                ui.timer(0.25, _prefetch_proximo, once=True)
-            return
+    # Shell leve primeiro; conteúdo pesado no próximo tick (menos bloqueio WebSocket)
+    _mostrar_carregando()
+    ui.timer(0.05, _carregar_conteudo_inicial, once=True)
+    ui.timer(0.15, _carregar_flutuantes, once=True)
 
-    ui.timer(0.35, _prefetch_proximo, once=True)
     return True

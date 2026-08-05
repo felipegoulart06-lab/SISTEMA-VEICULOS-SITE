@@ -176,13 +176,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Permissions-Policy"] = (
             "camera=(), microphone=(), geolocation=()"
         )
+        # NiceGUI 3.x: ES modules, WebSocket e workers exigem connect-src/worker-src amplos
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com data:; "
             "img-src 'self' data: blob: https:; "
-            "connect-src 'self' ws: wss:;"
+            "connect-src 'self' ws: wss: http: https:; "
+            "worker-src 'self' blob:;"
         )
         if em_producao():
             response.headers["Strict-Transport-Security"] = (

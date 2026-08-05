@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 
 from dotenv import load_dotenv
 from passlib.hash import pbkdf2_sha256
-from sqlalchemy import create_engine, func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -522,7 +522,7 @@ def listar_logs(
     tipo: str | None = None,
     desde: datetime | None = None,
     ate: datetime | None = None,
-    limite: int = 300,
+    limite: int = 150,
 ) -> list[LogPlataforma]:
     with get_plataforma_session() as db:
         q = select(LogPlataforma).order_by(LogPlataforma.criado_em.desc())
@@ -737,11 +737,76 @@ def obter_conta(conta_id: int) -> Conta | None:
 
 
 def obter_conta_por_slug(slug: str) -> Conta | None:
+    from loja.cache_local import get_query, set_query
+
+    key = (slug or "").lower().strip()
+    if not key:
+        return None
+    chave = f"plat:slug:{key}"
+    cached = get_query(chave, ttl=300)
+    if cached is not None:
+        return _conta_de_snap(cached)
     with get_plataforma_session() as db:
-        c = db.scalar(select(Conta).where(Conta.slug == slug.lower().strip()))
+        c = db.scalar(select(Conta).where(Conta.slug == key))
         if c:
             db.expunge(c)
-        return c
+            set_query(chave, _conta_snap(c))
+            return c
+    return None
+
+
+def _conta_snap(c: Conta) -> dict:
+    return {
+        "id": c.id,
+        "slug": c.slug,
+        "nome": c.nome,
+        "ativa": c.ativa,
+        "status": c.status,
+    }
+
+
+def _conta_de_snap(snap: dict) -> Conta:
+    c = Conta()
+    for k, v in snap.items():
+        if hasattr(c, k):
+            setattr(c, k, v)
+    return c
+
+
+def _cache_host(tipo: str, variantes: list[str], conta: Conta | None) -> None:
+    from loja.cache_local import set_query
+
+    if not variantes:
+        return
+    snap = _conta_snap(conta) if conta else None
+    if snap is None:
+        return
+    for h in variantes:
+        set_query(f"plat:host:{tipo}:{h}", snap)
+
+
+def _conta_cache_host(tipo: str, variantes: list[str]) -> Conta | None:
+    from loja.cache_local import get_query
+
+    for h in variantes:
+        cached = get_query(f"plat:host:{tipo}:{h}", ttl=300)
+        if cached is not None:
+            return _conta_de_snap(cached)
+    return None
+
+
+def aquecer_cache_dominios() -> None:
+    """Pré-carrega mapa domínio→empresa (evita cold-start lento no site)."""
+    try:
+        for c in listar_contas(apenas_ativas=True):
+            if c.dominio_site:
+                _cache_host("site", _variantes_host(c.dominio_site), c)
+            if c.subdominio:
+                _cache_host("erp", _variantes_host(c.subdominio), c)
+            from loja.cache_local import set_query
+            set_query(f"plat:slug:{c.slug}", _conta_snap(c))
+    except Exception as err:
+        print(f"[startup] cache dominios: {err}")
 
 
 def _variantes_host(host: str) -> list[str]:
@@ -758,42 +823,48 @@ def _variantes_host(host: str) -> list[str]:
 
 def obter_conta_por_subdominio(host: str) -> Conta | None:
     """Empresa cujo subdomínio ERP coincide com o Host."""
-    for h in _variantes_host(host):
-        with get_plataforma_session() as db:
-            c = db.scalar(
-                select(Conta).where(
-                    Conta.subdominio == h,
-                    Conta.ativa.is_(True),
-                )
+    variantes = _variantes_host(host)
+    if not variantes:
+        return None
+    hit = _conta_cache_host("erp", variantes)
+    if hit is not None:
+        return hit
+    with get_plataforma_session() as db:
+        c = db.scalar(
+            select(Conta).where(
+                Conta.ativa.is_(True),
+                or_(
+                    Conta.subdominio.in_(variantes),
+                    Conta.dominio_erp.in_(variantes),
+                ),
             )
-            if c is None:
-                c = db.scalar(
-                    select(Conta).where(
-                        Conta.dominio_erp == h,
-                        Conta.ativa.is_(True),
-                    )
-                )
-            if c:
-                db.expunge(c)
-                return c
+        )
+        if c:
+            db.expunge(c)
+            _cache_host("erp", variantes, c)
+            return c
     return None
 
 
 def obter_conta_por_dominio_site(host: str) -> Conta | None:
     """Empresa cujo domínio público do site coincide com o Host."""
-    for h in _variantes_host(host):
-        if not h:
-            continue
-        with get_plataforma_session() as db:
-            c = db.scalar(
-                select(Conta).where(
-                    Conta.dominio_site == h,
-                    Conta.ativa.is_(True),
-                )
+    variantes = _variantes_host(host)
+    if not variantes:
+        return None
+    hit = _conta_cache_host("site", variantes)
+    if hit is not None:
+        return hit
+    with get_plataforma_session() as db:
+        c = db.scalar(
+            select(Conta).where(
+                Conta.dominio_site.in_(variantes),
+                Conta.ativa.is_(True),
             )
-            if c:
-                db.expunge(c)
-                return c
+        )
+        if c:
+            db.expunge(c)
+            _cache_host("site", variantes, c)
+            return c
     return None
 
 
@@ -946,6 +1017,10 @@ def atualizar_dominios(
         nome = c.nome
         db.commit()
     if alterados:
+        from loja.cache_local import invalidar_queries
+
+        invalidar_queries("plat:host")
+        invalidar_queries("plat:slug")
         registrar_log(
             "dominio_alterado",
             f"Domínios de {nome} — {', '.join(alterados)}",

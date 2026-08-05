@@ -39,6 +39,7 @@ from loja.auth import (
 )
 from loja.repositorio import config_como_dict
 from loja.tenant_ctx import ligar_tenant, site_url
+from loja.whitelabel import aplicar_marca_navegador
 
 ROTAS_ERP: dict[str, Callable] = {
     "/admin": pagina_dashboard,
@@ -61,11 +62,8 @@ ROTAS_ERP: dict[str, Callable] = {
 }
 
 # Painéis em memória: clique vira só show/hide
-TTL_PAINEL = 3600.0
-PREFETCH = tuple(
-    href for href in ROTAS_ERP
-    if href not in ("/admin/campanhas", "/admin/site/institucional")
-)
+TTL_PAINEL = 600.0
+MAX_PAINEIS_CACHE = 4
 
 
 def normalizar_rota_erp(path: str | None) -> str:
@@ -92,6 +90,7 @@ def montar_erp_spa(rota_inicial: str = "/admin") -> None:
         ligar_tenant(slug)
     _css_admin()
     cfg = config_como_dict()
+    aplicar_marca_navegador(cfg)
     nome_sistema = cfg.get("nome_sistema", "Gestão Veículos")
     link_site = site_url("/")
 
@@ -143,6 +142,23 @@ def montar_erp_spa(rota_inicial: str = "/admin") -> None:
             if el is not None:
                 el.set_visibility(False)
 
+    def _evictar_paineis(destino: str) -> None:
+        reservados = {destino, "loading"}
+        while len(paineis) > MAX_PAINEIS_CACHE:
+            candidatos = [
+                (k, v) for k, v in paineis.items() if k not in reservados
+            ]
+            if not candidatos:
+                break
+            chave, info = min(candidatos, key=lambda x: x[1].get("ts", 0))
+            el = info.get("el")
+            if el is not None:
+                try:
+                    el.delete()
+                except Exception:
+                    pass
+            paineis.pop(chave, None)
+
     def _montar_painel(destino: str, visivel: bool = True) -> None:
         host = host_ref["el"]
         if host is None:
@@ -161,6 +177,7 @@ def montar_erp_spa(rota_inicial: str = "/admin") -> None:
                 fn = ROTAS_ERP.get(destino, pagina_dashboard)
                 fn()
             paineis[destino] = {"el": painel, "ts": time.monotonic()}
+        _evictar_paineis(destino)
 
     def _mostrar(destino: str, forcar: bool = False) -> None:
         agora = time.monotonic()
@@ -335,20 +352,3 @@ def montar_erp_spa(rota_inicial: str = "/admin") -> None:
             with host_ref["el"]:
                 pass
             _mostrar(estado["rota"], forcar=True)
-
-    fila = [r for r in PREFETCH if r != estado["rota"]]
-
-    def _prefetch_proximo() -> None:
-        while fila:
-            rota = fila.pop(0)
-            if rota in paineis or rota == estado["rota"]:
-                continue
-            try:
-                _montar_painel(rota, visivel=False)
-            except Exception:
-                pass
-            if fila:
-                ui.timer(0.2, _prefetch_proximo, once=True)
-            return
-
-    ui.timer(0.3, _prefetch_proximo, once=True)

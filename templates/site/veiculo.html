@@ -1,0 +1,58 @@
+{% extends "site/base.html" %}
+{% block content %}
+<div class="pagina-detalhe">
+  {% if mensagem %}<p class="alerta-sucesso">{{ mensagem }}</p>{% endif %}
+  {% if erro %}<p class="alerta-erro">{{ erro }}</p>{% endif %}
+  <nav class="breadcrumb">
+    <a href="{{ url('/') }}">Início</a> ›
+    <a href="{{ url('/estoque') }}">Estoque</a> ›
+    {{ veiculo.marca }} {{ veiculo.modelo }}
+  </nav>
+  <div class="detalhe-layout">
+    <div class="detalhe-galeria">
+      {% if fotos %}
+      <img src="{{ fotos[0] }}" alt="{{ veiculo.marca }} {{ veiculo.modelo }}" class="detalhe-foto-principal" id="foto-principal">
+      {% if fotos|length > 1 %}
+      <div class="detalhe-miniaturas">
+        {% for f in fotos %}
+        <img src="{{ f }}" alt="" loading="lazy" onclick="document.getElementById('foto-principal').src=this.src">
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="detalhe-sem-foto">Sem foto</div>
+      {% endif %}
+    </div>
+    <div class="detalhe-info">
+      <h1>{{ veiculo.marca }} {{ veiculo.modelo }} {{ veiculo.ano }}</h1>
+      <p class="detalhe-preco">{{ veiculo.preco_fmt }}</p>
+      <ul class="detalhe-specs">
+        <li><strong>Ano:</strong> {{ veiculo.ano }}</li>
+        <li><strong>KM:</strong> {{ veiculo.km_fmt }}</li>
+        <li><strong>Combustível:</strong> {{ veiculo.combustivel }}</li>
+        <li><strong>Câmbio:</strong> {{ veiculo.cambio }}</li>
+        {% if veiculo.cor %}<li><strong>Cor:</strong> {{ veiculo.cor }}</li>{% endif %}
+        {% if veiculo.placa %}<li><strong>Placa:</strong> {{ veiculo.placa }}</li>{% endif %}
+      </ul>
+      {% if veiculo.descricao %}
+      <div class="detalhe-descricao">
+        <h2>Descrição</h2>
+        <p>{{ veiculo.descricao }}</p>
+      </div>
+      {% endif %}
+      {% if wa_link %}
+      <a href="{{ wa_link }}" class="btn btn-preto" target="_blank" rel="noopener">Falar no WhatsApp</a>
+      {% endif %}
+      <form method="post" action="{{ url('/interesse') }}" class="form-avaliacao contato-form form-site form-interesse">
+        <h2>Tenho interesse</h2>
+        <input type="hidden" name="veiculo_id" value="{{ veiculo.id }}">
+        <label>Nome <input type="text" name="nome" required maxlength="120"></label>
+        <label>Telefone <input type="tel" name="telefone" required maxlength="30"></label>
+        <label>E-mail <input type="email" name="email" maxlength="120"></label>
+        <label>Mensagem <textarea name="mensagem" rows="3" maxlength="2000"></textarea></label>
+        <button type="submit" class="btn btn-preto btn-enviar-avaliacao">Enviar interesse</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

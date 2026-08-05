@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ titulo_pagina }}</title>
+  {% if seo_descricao %}<meta name="description" content="{{ seo_descricao }}">{% endif %}
+  <link rel="stylesheet" href="/static/estilo.css?v=24">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+  <style>:root { --vermelho: {{ cor }}; --cor-primaria: {{ cor }}; }</style>
+  {% if favicon_html %}{{ favicon_html|safe }}{% endif %}
+</head>
+<body>
+  {% if social_links %}
+  <div class="barra-social">
+    <div class="conteudo">
+      {% for rotulo, href in social_links %}
+      <a href="{{ href }}"{% if not href.startswith('mailto:') %} target="_blank" rel="noopener"{% endif %}>{{ rotulo }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <header class="cabecalho-principal">
+    <div class="conteudo">
+      <div class="logo">
+        <a href="{{ url('/') }}" style="text-decoration:none;color:inherit">
+          {{ logo_html|safe }}
+        </a>
+      </div>
+      <nav class="menu-nav">
+        {% for rotulo, href in menu %}
+        <a href="{{ url(href) }}" class="site-nav-link{% if rota_ativa == href %} ativo{% endif %}">{{ rotulo }}</a>
+        {% endfor %}
+      </nav>
+      <form class="busca-cabecalho" action="{{ url('/estoque') }}" method="get">
+        <input type="search" name="busca" placeholder="Buscar veículo..." value="{{ busca_cabecalho or '' }}">
+        <button type="submit" class="btn btn-preto">BUSCAR</button>
+      </form>
+    </div>
+  </header>
+
+  <main class="site-html-main">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="rodape">
+    <div class="conteudo">
+      <div class="rodape-info">{{ bloco_empresa|safe }}</div>
+      <div class="logo-rodape">{{ logo_html|safe }}</div>
+      <div class="rodape-info direita">
+        <strong>Contato</strong><br>
+        {% if loja.email %}{{ loja.email }}<br>{% endif %}
+        {% if loja.telefone %}Tel: {{ loja.telefone }}<br>{% endif %}
+        {% if loja.whatsapp %}WhatsApp: {{ loja.whatsapp }}{% endif %}
+      </div>
+    </div>
+    <div class="rodape-base">
+      © {{ ano }} {{ loja.nome }}{% if loja.cnpj %} · CNPJ {{ loja.cnpj }}{% endif %} — Todos os direitos reservados.
+      <span class="rodape-legal">
+        <a href="{{ url('/privacidade') }}">Política de Privacidade</a>
+        <a href="{{ url('/lgpd') }}">LGPD</a>
+      </span>
+    </div>
+  </footer>
+
+  {% if wa_link %}
+  <a href="{{ wa_link }}" class="site-btn-atendimento" target="_blank" rel="noopener" title="WhatsApp">
+    <span class="material-icons">support_agent</span>
+  </a>
+  {% endif %}
+</body>
+</html>

@@ -9,7 +9,7 @@ from loja.crm_repo import (
 from loja.repositorio import (
     ORIGENS,
     listar_campanhas,
-    listar_todos_veiculos,
+    listar_veiculos_resumo,
     salvar_campanha,
     salvar_veiculo,
 )
@@ -137,7 +137,7 @@ def _destaques() -> None:
 
     @ui.refreshable
     def lista():
-        for v in listar_todos_veiculos():
+        for v in listar_veiculos_resumo():
             if v.status != "disponivel":
                 continue
             with ui.row().classes("w-full items-center justify-between"):

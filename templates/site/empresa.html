@@ -1,0 +1,32 @@
+{% extends "site/base.html" %}
+{% block content %}
+<div class="pagina-empresa">
+  {% if institucional.intro %}
+  <section class="empresa-intro">
+    <h1>{{ institucional.intro.titulo or 'Nossa empresa' }}</h1>
+    {% if institucional.intro.subtitulo %}<p class="empresa-sub">{{ institucional.intro.subtitulo }}</p>{% endif %}
+    {% if institucional.intro.texto %}<p>{{ institucional.intro.texto }}</p>{% endif %}
+  </section>
+  {% endif %}
+  {% if institucional.pilares %}
+  <section class="empresa-pilares">
+    <h2>Nossos pilares</h2>
+    <div class="pilares-grade">
+      {% for p in institucional.pilares %}
+      <div class="pilar-card">
+        <span class="material-icons">{{ p.icone or 'star' }}</span>
+        <h3>{{ p.titulo }}</h3>
+        <p>{{ p.texto }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+  {% if loja.sobre %}
+  <section class="empresa-sobre">
+    <h2>Sobre nós</h2>
+    <p>{{ loja.sobre }}</p>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

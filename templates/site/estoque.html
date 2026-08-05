@@ -1,0 +1,73 @@
+{% extends "site/base.html" %}
+{% block content %}
+<div class="pagina-estoque corpo-estoque-wrap">
+  <div class="estoque-layout">
+    <aside class="filtro-sidebar">
+      <h2 class="filtro-titulo">Filtrar Resultado</h2>
+      <form method="get" action="{{ url('/estoque') }}">
+        {% if filtros.busca %}<input type="hidden" name="busca" value="{{ filtros.busca }}">{% endif %}
+        {% if filtros.ordenar %}<input type="hidden" name="ordenar" value="{{ filtros.ordenar }}">{% endif %}
+        {% for grupo in facetas_grupos %}
+        <div class="filtro-grupo">
+          <h3>{{ grupo.titulo }}</h3>
+          {% for valor, qtd in grupo.itens %}
+          <label class="filtro-opcao">
+            <input type="radio" name="{{ grupo.campo }}" value="{{ valor }}"
+              {% if grupo.ativo == valor %}checked{% endif %}
+              onchange="this.form.submit()">
+            {{ valor }} ({{ qtd }})
+          </label>
+          {% endfor %}
+        </div>
+        {% endfor %}
+        <a href="{{ url('/estoque') }}" class="filtro-limpar">Limpar filtros</a>
+      </form>
+    </aside>
+    <div class="estoque-principal">
+      <div class="estoque-cabecalho">
+        <p><strong>{{ total }}</strong> veículo(s) encontrado(s)</p>
+        <form method="get" class="estoque-ordenar">
+          {% for k, v in filtros_hidden.items() %}
+          <input type="hidden" name="{{ k }}" value="{{ v }}">
+          {% endfor %}
+          <select name="ordenar" onchange="this.form.submit()">
+            {% for val, rotulo in ordenacoes.items() %}
+            <option value="{{ val }}"{% if filtros.ordenar == val %} selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+          </select>
+        </form>
+      </div>
+      {% if veiculos %}
+      <div class="estoque-lista">
+        {% for v in veiculos %}
+        <article class="estoque-item">
+          <a href="{{ url('/veiculo/' ~ v.id) }}" class="estoque-item-foto">
+            <img src="{{ v.imagem }}" alt="{{ v.marca }} {{ v.modelo }}" loading="lazy">
+          </a>
+          <div class="estoque-item-corpo">
+            <h3><a href="{{ url('/veiculo/' ~ v.id) }}">{{ v.marca }} {{ v.modelo }} {{ v.ano }}</a></h3>
+            <p class="estoque-item-preco">{{ v.preco_fmt }}</p>
+            <p class="estoque-item-specs">{{ v.cambio }} · {{ v.combustivel }} · {{ v.km_fmt }}</p>
+            <a href="{{ url('/veiculo/' ~ v.id) }}" class="btn btn-preto">Ver detalhes</a>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% if total_paginas > 1 %}
+      <nav class="estoque-paginacao">
+        {% if filtros.pagina > 1 %}
+        <a href="{{ pagina_url(filtros.pagina - 1) }}">← Anterior</a>
+        {% endif %}
+        <span>Página {{ filtros.pagina }} de {{ total_paginas }}</span>
+        {% if filtros.pagina < total_paginas %}
+        <a href="{{ pagina_url(filtros.pagina + 1) }}">Próxima →</a>
+        {% endif %}
+      </nav>
+      {% endif %}
+      {% else %}
+      <p class="estoque-vazio">Nenhum veículo encontrado com os filtros selecionados.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

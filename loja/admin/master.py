@@ -997,10 +997,14 @@ def pagina_master_logs() -> None:
             ate = datetime.strptime(filtro["ate"], "%Y-%m-%d") + timedelta(days=1)
         except (TypeError, ValueError):
             desde, ate = None, None
-        logs = listar_logs(filtro["tipo"], desde, ate)
+        logs = listar_logs(filtro["tipo"], desde, ate, limite=150)
         if not logs:
             ui.html('<p class="erp-ajuda">Nenhum log no período.</p>')
             return
+        if len(logs) >= 150:
+            ui.html(
+                '<p class="erp-ajuda">Exibindo os 150 eventos mais recentes do período.</p>'
+            )
         with ui.element("div").classes("mst-tabela-wrap"):
             ui.html(
                 '<div class="mst-tabela-head mst-head-log">'

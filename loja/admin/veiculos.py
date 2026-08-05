@@ -9,10 +9,11 @@ from loja.crm_repo import (
 from loja.repositorio import (
     CAMBIOS,
     COMBUSTIVEIS,
+    LIMITE_LISTAGEM_ERP,
     STATUS_VEICULO,
     excluir_veiculo,
     formatar_preco,
-    listar_todos_veiculos,
+    listar_veiculos_resumo,
     obter_veiculo,
     salvar_veiculo,
 )
@@ -29,7 +30,12 @@ def pagina_veiculos() -> None:
 
     @ui.refreshable
     def tabela() -> None:
-        veiculos = listar_todos_veiculos()
+        veiculos = listar_veiculos_resumo()
+        if len(veiculos) >= LIMITE_LISTAGEM_ERP:
+            ui.html(
+                f'<p class="erp-ajuda">Exibindo os {LIMITE_LISTAGEM_ERP} veículos '
+                "mais recentes. Use filtros ou exportação se precisar de mais.</p>"
+            )
         colunas = [
             {"name": "id", "label": "#", "field": "id"},
             {"name": "veiculo", "label": "Veículo", "field": "veiculo"},
@@ -54,7 +60,7 @@ def pagina_veiculos() -> None:
             })
 
         tbl = ui.table(
-            columns=colunas, rows=linhas, row_key="id", pagination=10
+            columns=colunas, rows=linhas, row_key="id", pagination=25
         ).classes("erp-tabela").props("flat bordered dense")
 
         tbl.add_slot("body-cell-acoes", """
@@ -69,10 +75,7 @@ def pagina_veiculos() -> None:
         """)
         def on_excluir(e):
             vid = id_do_evento(e)
-            v = next(
-                (x for x in listar_todos_veiculos() if x.id == vid),
-                None,
-            )
+            v = obter_veiculo(vid)
             rotulo = (
                 f"o veículo «{v.marca} {v.modelo}»"
                 if v else "este veículo"
