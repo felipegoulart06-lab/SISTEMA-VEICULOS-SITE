@@ -23,7 +23,7 @@ from loja.componentes import (
 from loja.database import init_db
 from loja.pagina_conteudo import montar_pagina_conteudo, obter_pagina
 from loja.pagina_detalhe import montar_pagina_detalhe
-from loja.plataforma import aquecer_cache_dominios, listar_contas, obter_conta_por_slug
+from loja.plataforma import aquecer_cache_dominios, aquecer_site_tenants, listar_contas, obter_conta_por_slug
 from loja.repositorio import (
     FiltrosEstoque,
     config_como_dict,
@@ -88,6 +88,7 @@ def _log_startup() -> None:
 _log_startup()
 init_db()
 aquecer_cache_dominios()
+aquecer_site_tenants()
 
 CSS_SITE = "/static/estilo.css?v=22"
 

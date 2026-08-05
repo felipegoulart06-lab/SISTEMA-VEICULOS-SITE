@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from passlib.hash import pbkdf2_sha256
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select, cast, String
 from sqlalchemy.orm import Session
 
 from loja.database import get_session
@@ -374,50 +374,71 @@ def _ordenar_query(q, ordenar: str):
     return q.order_by(VeiculoDB.id.desc())
 
 
+def _filtro_busca(q, busca: str):
+    termo = busca.strip().lower()
+    if not termo:
+        return q
+    padrao = f"%{termo}%"
+    return q.where(
+        or_(
+            func.lower(VeiculoDB.modelo).like(padrao),
+            func.lower(VeiculoDB.marca).like(padrao),
+            cast(VeiculoDB.ano, String).like(padrao),
+        )
+    )
+
+
 def facetas_estoque() -> dict:
-    with get_session() as db:
-        todos = db.scalars(
-            select(VeiculoDB).where(
-                VeiculoDB.status == "disponivel",
-                VeiculoDB.publicado.is_(True),
-            )
+    from loja.cache_local import get_facetas_cache, set_facetas_cache
+    from loja.tenant_ctx import get_tenant_slug
+
+    slug = get_tenant_slug() or ""
+    cached = get_facetas_cache(slug)
+    if cached is not None:
+        return cached
+
+    base = (
+        VeiculoDB.status == "disponivel",
+        VeiculoDB.publicado.is_(True),
+    )
+
+    def agrupar(db: Session, campo: str) -> list[tuple]:
+        col = getattr(VeiculoDB, campo)
+        rows = db.execute(
+            select(col, func.count())
+            .where(*base)
+            .group_by(col)
         ).all()
+        if campo == "ano":
+            return sorted(rows, key=lambda x: -x[0])
+        return sorted(rows, key=lambda x: (-x[1], str(x[0])))
 
-        def agrupar(campo: str) -> list[tuple]:
-            c: dict = {}
-            for v in todos:
-                k = getattr(v, campo)
-                c[k] = c.get(k, 0) + 1
-            if campo == "ano":
-                return sorted(c.items(), key=lambda x: -x[0])
-            return sorted(c.items(), key=lambda x: (-x[1], str(x[0])))
-
-        return {
-            "tipo": agrupar("tipo"),
-            "marca": agrupar("marca"),
-            "ano": agrupar("ano"),
-            "combustivel": agrupar("combustivel"),
-            "cor": agrupar("cor"),
-            "total": len(todos),
+    with get_session() as db:
+        total = db.scalar(
+            select(func.count()).select_from(VeiculoDB).where(*base)
+        ) or 0
+        resultado = {
+            "tipo": agrupar(db, "tipo"),
+            "marca": agrupar(db, "marca"),
+            "ano": agrupar(db, "ano"),
+            "combustivel": agrupar(db, "combustivel"),
+            "cor": agrupar(db, "cor"),
+            "total": total,
         }
+    if slug:
+        set_facetas_cache(slug, resultado)
+    return resultado
 
 
 def filtrar_estoque(f: FiltrosEstoque) -> tuple[list[Veiculo], int]:
     with get_session() as db:
-        q = _ordenar_query(_query_estoque(db, f), f.ordenar)
-        rows = db.scalars(q).all()
-        resultado = [_to_veiculo(v) for v in rows]
-        if f.busca.strip():
-            termo = f.busca.strip().lower()
-            resultado = [
-                v for v in resultado
-                if termo in v.modelo.lower()
-                or termo in v.marca.lower()
-                or str(v.ano) in termo
-            ]
-        total = len(resultado)
+        q = _query_estoque(db, f)
+        q = _filtro_busca(q, f.busca)
+        total = db.scalar(select(func.count()).select_from(q.subquery())) or 0
+        q = _ordenar_query(q, f.ordenar)
         inicio = (f.pagina - 1) * ITENS_POR_PAGINA
-        return resultado[inicio:inicio + ITENS_POR_PAGINA], total
+        rows = db.scalars(q.offset(inicio).limit(ITENS_POR_PAGINA)).all()
+        return [_to_veiculo(v) for v in rows], total
 
 
 def listar_leads(limite: int = 300) -> list[Lead]:

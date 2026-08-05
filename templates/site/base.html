@@ -5,8 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ titulo_pagina }}</title>
   {% if seo_descricao %}<meta name="description" content="{{ seo_descricao }}">{% endif %}
-  <link rel="stylesheet" href="/static/estilo.css?v=24">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="/static/estilo.css?v=25">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons"></noscript>
   <style>:root { --vermelho: {{ cor }}; --cor-primaria: {{ cor }}; }</style>
   {% if favicon_html %}{{ favicon_html|safe }}{% endif %}
 </head>

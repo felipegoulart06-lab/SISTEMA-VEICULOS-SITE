@@ -12,13 +12,21 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 
-from loja.config import MENU
+from loja.cache_local import (
+    TTL_HTML_ESTOQUE,
+    TTL_HTML_HOME,
+    TTL_HTML_PAGINA,
+    get_depoimentos_cache,
+    get_html_cache,
+    invalidar_site_html,
+    set_depoimentos_cache,
+    set_html_cache,
+)
 from loja.crm_repo import listar_depoimentos
 from loja.institucional import obter_institucional
 from loja.pagina_conteudo import obter_pagina
 from loja.pagina_contato import ASSUNTOS
 from loja.pagina_estoque import ORDENACOES
-from loja.plataforma import obter_conta_por_slug
 from loja.repositorio import (
     FiltrosEstoque,
     ITENS_POR_PAGINA,
@@ -50,7 +58,14 @@ _TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
 _env = Environment(
     loader=FileSystemLoader(str(_TEMPLATES)),
     autoescape=select_autoescape(["html", "xml"]),
+    auto_reload=False,
+    cache_size=32,
 )
+
+_CACHE_HEADERS = {
+    "Cache-Control": "public, max-age=60, stale-while-revalidate=120",
+    "X-Sigma-Site": "html",
+}
 
 
 def _logo_html(loja: dict) -> str:
@@ -143,9 +158,38 @@ def _ctx_base(slug: str, rota_ativa: str = "") -> dict:
     }
 
 
-def _render(template: str, **ctx) -> HTMLResponse:
+def _depoimentos_site() -> list[dict]:
+    from loja.tenant_ctx import get_tenant_slug
+
+    slug = get_tenant_slug() or ""
+    cached = get_depoimentos_cache(slug)
+    if cached is not None:
+        return cached
+    dados = [
+        {"nome": d.nome, "texto": d.texto, "nota": d.nota or 5}
+        for d in listar_depoimentos(apenas_ativos=True)[:6]
+    ]
+    if slug:
+        set_depoimentos_cache(slug, dados)
+    return dados
+
+
+def _render(
+    template: str,
+    slug: str,
+    *,
+    cache_key: str | None = None,
+    cache_ttl: float = TTL_HTML_PAGINA,
+    **ctx,
+) -> HTMLResponse:
+    if cache_key:
+        hit = get_html_cache(slug, cache_key, cache_ttl)
+        if hit is not None:
+            return HTMLResponse(hit, headers=_CACHE_HEADERS)
     html_out = _env.get_template(template).render(**ctx)
-    return HTMLResponse(html_out)
+    if cache_key:
+        set_html_cache(slug, cache_key, html_out)
+    return HTMLResponse(html_out, headers=_CACHE_HEADERS)
 
 
 def _filtros_da_query(request: Request) -> FiltrosEstoque:
@@ -214,10 +258,7 @@ def _render_home(slug: str, request: Request) -> HTMLResponse:
         if not destaque or v.id != destaque.id
     ]
     destaque_d = _serializar_veiculo(destaque) if destaque else None
-    depoimentos = [
-        {"nome": d.nome, "texto": d.texto, "nota": d.nota or 5}
-        for d in listar_depoimentos(apenas_ativos=True)[:6]
-    ]
+    depoimentos = _depoimentos_site()
     loja = config_como_dict()
     ctx = _ctx_base(slug, "/")
     ctx.update({
@@ -230,7 +271,13 @@ def _render_home(slug: str, request: Request) -> HTMLResponse:
         "veiculos": grade,
         "depoimentos": depoimentos,
     })
-    return _render("site/home.html", **ctx)
+    return _render(
+        "site/home.html",
+        slug,
+        cache_key=f"home:{marca or ''}",
+        cache_ttl=TTL_HTML_HOME,
+        **ctx,
+    )
 
 
 def _render_estoque(slug: str, request: Request) -> HTMLResponse:
@@ -260,10 +307,24 @@ def _render_estoque(slug: str, request: Request) -> HTMLResponse:
         "total_paginas": total_paginas,
         "pagina_url": lambda p: _pagina_url(slug, f, p),
     })
-    return _render("site/estoque.html", **ctx)
+    return _render(
+        "site/estoque.html",
+        slug,
+        cache_key=f"estoque:{request.url.query}",
+        cache_ttl=TTL_HTML_ESTOQUE,
+        **ctx,
+    )
 
 
 def _render_veiculo(slug: str, veiculo_id: int, request: Request | None = None) -> Response:
+    qp = request.query_params if request else {}
+    cache_key = None
+    if not (qp.get("ok") or qp.get("erro")):
+        cache_key = f"veiculo:{veiculo_id}"
+        hit = get_html_cache(slug, cache_key, TTL_HTML_PAGINA)
+        if hit is not None:
+            return HTMLResponse(hit, headers=_CACHE_HEADERS)
+
     v = obter_veiculo_publico(veiculo_id)
     if v is None:
         loja = config_como_dict()
@@ -277,7 +338,7 @@ def _render_veiculo(slug: str, veiculo_id: int, request: Request | None = None) 
                 'class="btn btn-preto">Ver estoque</a></p>'
             ),
         })
-        return _render("site/conteudo.html", **ctx)
+        return _render("site/conteudo.html", slug, **ctx)
 
     incrementar_visualizacoes(veiculo_id)
     loja = config_como_dict()
@@ -296,7 +357,6 @@ def _render_veiculo(slug: str, veiculo_id: int, request: Request | None = None) 
         "descricao": v.descricao or "",
     }
     ctx = _ctx_base(slug, "/estoque")
-    qp = request.query_params if request else {}
     ctx.update({
         "titulo_pagina": titulo_aba_site(loja, titulo),
         "veiculo": veiculo,
@@ -314,7 +374,13 @@ def _render_veiculo(slug: str, veiculo_id: int, request: Request | None = None) 
             if qp.get("erro") else ""
         ),
     })
-    return _render("site/veiculo.html", **ctx)
+    return _render(
+        "site/veiculo.html",
+        slug,
+        cache_key=cache_key,
+        cache_ttl=TTL_HTML_PAGINA,
+        **ctx,
+    )
 
 
 def _render_empresa(slug: str) -> HTMLResponse:
@@ -324,7 +390,13 @@ def _render_empresa(slug: str) -> HTMLResponse:
         "titulo_pagina": titulo_aba_site(loja, "Empresa"),
         "institucional": obter_institucional(),
     })
-    return _render("site/empresa.html", **ctx)
+    return _render(
+        "site/empresa.html",
+        slug,
+        cache_key="empresa",
+        cache_ttl=TTL_HTML_PAGINA,
+        **ctx,
+    )
 
 
 def _render_conteudo(slug: str, pagina_slug: str, rota: str) -> HTMLResponse:
@@ -348,7 +420,13 @@ def _render_conteudo(slug: str, pagina_slug: str, rota: str) -> HTMLResponse:
         "titulo": titulo,
         "conteudo": conteudo,
     })
-    return _render("site/conteudo.html", **ctx)
+    return _render(
+        "site/conteudo.html",
+        slug,
+        cache_key=f"pagina:{pagina_slug}",
+        cache_ttl=TTL_HTML_PAGINA,
+        **ctx,
+    )
 
 
 def _render_contato(
@@ -367,7 +445,13 @@ def _render_contato(
         "erro": erro,
         "form": form or {},
     })
-    return _render("site/contato.html", **ctx)
+    return _render(
+        "site/contato.html",
+        slug,
+        cache_key="contato" if not mensagem and not erro else None,
+        cache_ttl=TTL_HTML_PAGINA,
+        **ctx,
+    )
 
 
 async def _processar_contato(slug: str, request: Request) -> Response:
@@ -394,6 +478,7 @@ async def _processar_contato(slug: str, request: Request) -> Response:
         "status": "novo",
         "observacoes": f"[{rotulo}] {mensagem_txt}",
     })
+    invalidar_site_html(slug)
     return _render_contato(
         slug,
         mensagem="Mensagem enviada! Em breve nossa equipe entrará em contato.",
@@ -432,6 +517,7 @@ async def _processar_interesse(slug: str, request: Request) -> Response:
             + (f"\n{mensagem_txt}" if mensagem_txt else "")
         ),
     })
+    invalidar_site_html(slug)
     if veiculo_id:
         return RedirectResponse(
             site_url(f"/veiculo/{veiculo_id}?ok=1", slug),
@@ -459,14 +545,6 @@ async def tentar_responder_html(
     request: Request,
 ) -> Response | None:
     """Renderiza HTML do site público ou None para passar ao NiceGUI."""
-    conta = obter_conta_por_slug(slug)
-    if conta is None or not conta.ativa:
-        return HTMLResponse(
-            "<h1>Loja não encontrada</h1>"
-            "<p>Esta conta não existe ou está inativa.</p>",
-            status_code=404,
-        )
-
     ligar_tenant(slug)
     path = _normalizar_path(path)
     method = request.method.upper()
