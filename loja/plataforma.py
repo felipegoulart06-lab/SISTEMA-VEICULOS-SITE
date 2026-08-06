@@ -706,6 +706,31 @@ def listar_contas(apenas_ativas: bool = False) -> list[Conta]:
         return list(rows)
 
 
+def _conta_acessivel(conta: Conta | None) -> Conta | None:
+    """None se a conta não existir ou estiver bloqueada (desativada, vencida…)."""
+    if conta is None:
+        return None
+    liberado, _ = empresa_pode_acessar(conta)
+    return conta if liberado else None
+
+
+def invalidar_cache_conta(slug: str, conta_id: int) -> None:
+    """Limpa caches de domínio/slug/conta após desativar ou editar empresa."""
+    from loja.cache_local import (
+        invalidar_conta,
+        invalidar_queries,
+        invalidar_site_html,
+        invalidar_tenant,
+    )
+
+    invalidar_conta(conta_id)
+    invalidar_queries("plat:contas")
+    invalidar_queries("plat:host")
+    invalidar_queries(f"plat:slug:{(slug or '').lower().strip()}")
+    invalidar_tenant(slug)
+    invalidar_site_html(slug)
+
+
 def obter_conta(conta_id: int) -> Conta | None:
     from loja.cache_local import get_conta_cache, set_conta_cache
 
@@ -745,7 +770,7 @@ def obter_conta_por_slug(slug: str) -> Conta | None:
     chave = f"plat:slug:{key}"
     cached = get_query(chave, ttl=300)
     if cached is not None:
-        return _conta_de_snap(cached)
+        return _conta_acessivel(_conta_de_snap(cached))
     with get_plataforma_session() as db:
         c = db.scalar(select(Conta).where(Conta.slug == key))
         if c:
@@ -791,7 +816,9 @@ def _conta_cache_host(tipo: str, variantes: list[str]) -> Conta | None:
     for h in variantes:
         cached = get_query(f"plat:host:{tipo}:{h}", ttl=300)
         if cached is not None:
-            return _conta_de_snap(cached)
+            ok = _conta_acessivel(_conta_de_snap(cached))
+            if ok is not None:
+                return ok
     return None
 
 
@@ -837,6 +864,30 @@ def _variantes_host(host: str) -> list[str]:
     else:
         variantes.append(f"www.{h}")
     return variantes
+
+
+def obter_conta_bloqueada_por_host(host: str) -> Conta | None:
+    """Empresa desativada cujo domínio ainda aponta para a plataforma (sem cache)."""
+    variantes = _variantes_host(host)
+    if not variantes:
+        return None
+    if obter_conta_por_subdominio(host) or obter_conta_por_dominio_site(host):
+        return None
+    with get_plataforma_session() as db:
+        c = db.scalar(
+            select(Conta).where(
+                or_(
+                    Conta.dominio_site.in_(variantes),
+                    Conta.subdominio.in_(variantes),
+                    Conta.dominio_erp.in_(variantes),
+                ),
+                Conta.ativa.is_(False),
+            )
+        )
+        if c:
+            db.expunge(c)
+            return c
+    return None
 
 
 def obter_conta_por_subdominio(host: str) -> Conta | None:
@@ -1047,7 +1098,6 @@ def atualizar_dominios(
 
 
 def alterar_status_conta(conta_id: int, status: str) -> None:
-    from loja.cache_local import invalidar_conta, invalidar_queries
     from loja.tempo import agora
 
     if status not in STATUS_CONTA:
@@ -1066,10 +1116,7 @@ def alterar_status_conta(conta_id: int, status: str) -> None:
         nome = c.nome
         slug = c.slug
         db.commit()
-    invalidar_conta(conta_id)
-    invalidar_queries("plat:contas")
-    from loja.cache_local import invalidar_tenant
-    invalidar_tenant(slug)
+    invalidar_cache_conta(slug, conta_id)
     tipo = "empresa_suspensa" if status == "suspensa" else "empresa_editada"
     registrar_log(
         tipo, f"Empresa {nome} agora está {STATUS_LABEL[status]}.",

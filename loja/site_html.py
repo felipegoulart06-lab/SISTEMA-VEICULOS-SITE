@@ -27,6 +27,7 @@ from loja.institucional import obter_institucional
 from loja.pagina_conteudo import obter_pagina
 from loja.pagina_contato import ASSUNTOS
 from loja.pagina_estoque import ORDENACOES
+from loja.plataforma import empresa_pode_acessar, obter_conta_por_slug
 from loja.repositorio import (
     FiltrosEstoque,
     ITENS_POR_PAGINA,
@@ -539,12 +540,42 @@ def _normalizar_path(path: str) -> str:
     return "/" if path == "/" else path.rstrip("/") or "/"
 
 
+def html_empresa_bloqueada(nome: str = "") -> HTMLResponse:
+    titulo = html.escape(nome) if nome else "Esta loja"
+    corpo = (
+        f"<!DOCTYPE html><html lang='pt-BR'><head>"
+        f"<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>{titulo} — Indisponível</title>"
+        f"<link rel='stylesheet' href='/static/estilo.css?v=25'>"
+        f"<style>.bloqueio{{max-width:520px;margin:80px auto;padding:32px;text-align:center;"
+        f"font-family:system-ui,sans-serif}} .bloqueio h1{{font-size:24px;margin-bottom:12px}}"
+        f".bloqueio p{{color:#555;line-height:1.6}}</style></head><body>"
+        f"<div class='bloqueio'><h1>Loja temporariamente indisponível</h1>"
+        f"<p><strong>{titulo}</strong> foi desativada pelo administrador da plataforma.</p>"
+        f"<p>Entre em contato com o suporte para reativar o acesso.</p></div></body></html>"
+    )
+    return HTMLResponse(corpo, status_code=403, headers={"X-Sigma-Site": "bloqueado"})
+
+
+def _exigir_conta_ativa(slug: str) -> HTMLResponse | None:
+    conta = obter_conta_por_slug(slug)
+    if conta is None:
+        return html_empresa_bloqueada()
+    liberado, _ = empresa_pode_acessar(conta)
+    if not liberado:
+        return html_empresa_bloqueada(conta.nome)
+    return None
+
+
 async def tentar_responder_html(
     slug: str,
     path: str,
     request: Request,
 ) -> Response | None:
     """Renderiza HTML do site público ou None para passar ao NiceGUI."""
+    bloqueio = _exigir_conta_ativa(slug)
+    if bloqueio is not None:
+        return bloqueio
     ligar_tenant(slug)
     path = _normalizar_path(path)
     method = request.method.upper()

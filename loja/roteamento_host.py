@@ -6,9 +6,14 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Literal
 
-from loja.plataforma import normalizar_dominio, obter_conta_por_dominio_site, obter_conta_por_subdominio
+from loja.plataforma import (
+    normalizar_dominio,
+    obter_conta_bloqueada_por_host,
+    obter_conta_por_dominio_site,
+    obter_conta_por_subdominio,
+)
 
-ModoHost = Literal["local", "erp", "site"]
+ModoHost = Literal["local", "erp", "site", "bloqueado"]
 
 HOSTS_LOCAIS = frozenset({"localhost", "127.0.0.1", "0.0.0.0", "::1"})
 
@@ -48,6 +53,10 @@ def resolver_contexto_host(host: str) -> ContextoHost:
     conta = obter_conta_por_dominio_site(h)
     if conta is not None:
         return ContextoHost(modo="site", slug=conta.slug, host=h)
+
+    bloqueada = obter_conta_bloqueada_por_host(h)
+    if bloqueada is not None:
+        return ContextoHost(modo="bloqueado", slug=bloqueada.slug, host=h)
 
     return ContextoHost(modo="local", host=h)
 

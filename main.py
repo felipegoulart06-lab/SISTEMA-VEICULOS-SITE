@@ -23,7 +23,7 @@ from loja.componentes import (
 from loja.database import init_db
 from loja.pagina_conteudo import montar_pagina_conteudo, obter_pagina
 from loja.pagina_detalhe import montar_pagina_detalhe
-from loja.plataforma import aquecer_cache_dominios, aquecer_site_tenants, listar_contas, obter_conta_por_slug
+from loja.plataforma import aquecer_cache_dominios, aquecer_site_tenants, empresa_pode_acessar, listar_contas, obter_conta_por_slug
 from loja.repositorio import (
     FiltrosEstoque,
     config_como_dict,
@@ -100,7 +100,10 @@ def health_check() -> dict[str, str]:
 
 def ativar_loja(slug: str) -> bool:
     conta = obter_conta_por_slug(slug)
-    if conta is None or not conta.ativa:
+    if conta is None:
+        return False
+    liberado, _ = empresa_pode_acessar(conta)
+    if not liberado:
         return False
     ligar_tenant(conta.slug)
     return True
@@ -164,6 +167,8 @@ def _salvar_filtros_estoque(filtros: FiltrosEstoque) -> None:
 
 @ui.page("/")
 def pagina_raiz() -> None:
+    if _host_bloqueado():
+        return
     ctx = get_contexto_host()
     if ctx.modo == "erp" and ctx.slug:
         ligar_tenant(ctx.slug)
@@ -232,6 +237,35 @@ def _loja_nao_encontrada() -> None:
     ui.html("<h1>Loja não encontrada</h1>")
     ui.html("<p>Esta conta não existe ou está inativa.</p>")
     ui.link("Voltar à plataforma", "/")
+
+
+def _pagina_empresa_bloqueada() -> None:
+    ui.add_head_html(
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+    )
+    ui.add_head_html(
+        "<style>body{margin:0;font-family:system-ui,sans-serif;background:#eef1f6}"
+        ".bloq{max-width:520px;margin:80px auto;padding:32px;background:#fff;"
+        "border-radius:12px;text-align:center;border:1px solid #e5e7eb}"
+        ".bloq h1{font-size:22px;margin:0 0 12px}.bloq p{color:#555;line-height:1.6}"
+        "</style>"
+    )
+    with ui.element("div").classes("bloq"):
+        ui.html("<h1>Acesso indisponível</h1>")
+        ui.html(
+            "<p>Esta empresa foi <strong>desativada</strong> pelo administrador "
+            "da plataforma.</p>"
+            "<p>O ERP e o site público estão temporariamente bloqueados. "
+            "Entre em contato com o suporte para reativar.</p>"
+        )
+
+
+def _host_bloqueado() -> bool:
+    ctx = get_contexto_host()
+    if ctx.modo != "bloqueado":
+        return False
+    _pagina_empresa_bloqueada()
+    return True
 
 
 # ---- Site público por conta: /loja/{slug}/... (SPA nos menus) ----
@@ -357,6 +391,8 @@ def pagina_avaliacao_loja(slug: str) -> None:
 
 @ui.page("/login")
 def rota_login_subdominio() -> None:
+    if _host_bloqueado():
+        return
     ctx = get_contexto_host()
     if ctx.modo == "erp" and ctx.slug:
         ligar_tenant(ctx.slug)
@@ -524,6 +560,8 @@ def rota_trocar_senha() -> None:
 @ui.page("/admin")
 @ui.page("/admin/{resto:path}")
 def rota_erp_spa(resto: str = "") -> None:
+    if _host_bloqueado():
+        return
     if resto in ("login", "trocar-senha"):
         if resto == "login":
             pagina_login()

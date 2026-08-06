@@ -26,7 +26,7 @@ from loja.pagina_contato import montar_pagina_contato
 from loja.pagina_empresa import montar_pagina_empresa
 from loja.pagina_estoque import montar_pagina_estoque
 from loja.pagina_financiamento import montar_formulario_financiamento
-from loja.plataforma import obter_conta_por_slug
+from loja.plataforma import obter_conta_por_slug, empresa_pode_acessar
 from loja.repositorio import (
     FiltrosEstoque,
     config_como_dict,
@@ -243,7 +243,10 @@ def montar_site_spa(
     financ_kwargs: dict | None = None,
 ) -> bool:
     conta = obter_conta_por_slug(slug)
-    if conta is None or not conta.ativa:
+    if conta is None:
+        return False
+    liberado, _ = empresa_pode_acessar(conta)
+    if not liberado:
         return False
     ligar_tenant(conta.slug)
 

@@ -93,8 +93,6 @@ def concluir_troca_senha(nova_senha: str) -> None:
 
 def exigir_login() -> bool:
     """Garante sessão da empresa. Retorna False se redirecionou."""
-    import time
-
     if master_logado() and not impersonando():
         ui.navigate.to("/master")
         return False
@@ -102,17 +100,6 @@ def exigir_login() -> bool:
     if not logado():
         ui.navigate.to(erp_login_url())
         return False
-
-    agora = time.time()
-    ultimo = float(app.storage.user.get("_acesso_check_em") or 0)
-    slug = app.storage.user.get("conta_slug")
-    # Revalida acesso no máximo a cada 90s (evita SELECT remoto a cada clique)
-    if slug and agora - ultimo < 90 and app.storage.user.get("_acesso_ok"):
-        ligar_tenant(slug)
-        if deve_trocar_senha():
-            ui.navigate.to(erp_trocar_senha_url())
-            return False
-        return True
 
     conta = obter_conta(app.storage.user.get("conta_id") or 0)
     if conta is None:
@@ -126,8 +113,6 @@ def exigir_login() -> bool:
         ui.navigate.to(erp_login_url())
         return False
     ligar_tenant(conta.slug)
-    app.storage.user["_acesso_check_em"] = agora
-    app.storage.user["_acesso_ok"] = True
     if deve_trocar_senha():
         ui.navigate.to(erp_trocar_senha_url())
         return False
