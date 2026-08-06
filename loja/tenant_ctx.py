@@ -46,10 +46,19 @@ def get_tenant_slug() -> str | None:
 
 
 def ligar_tenant(slug: str | None) -> None:
-    """Define o tenant no ContextVar e no storage da aba."""
+    """Define o tenant no ContextVar e no storage da aba (somente com cliente NiceGUI)."""
+    from nicegui import core
+
     normalizado = (slug or "").strip().lower() or None
     set_tenant_slug(normalizado)
+    # Antes do ui.run() ou em rotas HTML puras não há aba NiceGUI — evita script_mode.
+    if core.is_script_mode_preflight():
+        return
     try:
+        from nicegui import context
+
+        if context.client is None:
+            return
         if normalizado:
             app.storage.client["tenant_slug"] = normalizado
         else:

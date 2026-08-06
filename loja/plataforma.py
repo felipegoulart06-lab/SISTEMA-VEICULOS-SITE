@@ -810,16 +810,19 @@ def aquecer_cache_dominios() -> None:
 
 
 def aquecer_site_tenants() -> None:
-    """Pré-aquece engines Postgres, config e home cache de cada loja ativa."""
+    """Pré-aquece engines Postgres, config e marcas de cada loja ativa."""
     from loja.repositorio import config_como_dict, listar_marcas
-    from loja.tenant_ctx import ligar_tenant
+    from loja.tenant_ctx import set_tenant_slug
 
     try:
         for c in listar_contas(apenas_ativas=True):
-            ligar_tenant(c.slug)
-            engine_tenant(c.slug)
-            config_como_dict()
-            listar_marcas()
+            set_tenant_slug(c.slug)
+            try:
+                engine_tenant(c.slug)
+                config_como_dict()
+                listar_marcas()
+            finally:
+                set_tenant_slug(None)
     except Exception as err:
         print(f"[startup] aquecer site: {err}")
 
