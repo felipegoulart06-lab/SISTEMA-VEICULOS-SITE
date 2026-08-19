@@ -1,3 +1,7 @@
-*
-!vercel.json
-!DEPLOY-VERCEL.md
+# Ignorar dados locais; a Vercel usa Supabase + Storage remoto
+dados/
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*

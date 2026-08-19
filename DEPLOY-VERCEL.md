@@ -1,118 +1,149 @@
-# Deploy e domínios — Vercel vs servidor Docker
+# Deploy 100% na Vercel
 
 Repositório: [felipegoulart06-lab/SISTEMA-VEICULOS-SITE](https://github.com/felipegoulart06-lab/SISTEMA-VEICULOS-SITE)
 
----
-
-## Importante: o que a Vercel **não** faz neste projeto
-
-Esta aplicação é **Python + NiceGUI + WebSocket + FastAPI long-running**. A Vercel é **serverless** e **não executa** este stack como app completa.
-
-| Componente | Vercel serverless | Servidor Docker (recomendado) |
-|------------|-------------------|-------------------------------|
-| Site público (HTML) | Parcial | Sim |
-| ERP NiceGUI (WebSocket) | **Não** | Sim |
-| Painel Master | **Não** | Sim |
-| Uploads persistentes | **Não** | Sim (volume `/app/dados`) |
-| Multi-domínio por `Host` | Limitado | Sim |
-
-**Recomendação:** hospede a aplicação inteira em **Easypanel**, **Railway**, **Render** ou **Fly.io** usando o `Dockerfile` da raiz.
-
-Guia Easypanel: **[DEPLOY-EASYPANEL.md](DEPLOY-EASYPANEL.md)**
+A aplicação completa (site HTML + ERP NiceGUI + Painel Master) roda na **Vercel** como **FastAPI Function** com suporte a **WebSocket** (Fluid Compute).
 
 ---
 
-## Opção A — Hospedagem correta (recomendada)
+## Pré-requisitos
 
-### Easypanel / VPS
-
-1. Conecte o GitHub `felipegoulart06-lab/SISTEMA-VEICULOS-SITE`
-2. Build: **Dockerfile**, porta **8080**
-3. Volume: `/app/dados`
-4. Variáveis: copie de `.env.example` (Supabase, `SECRET_KEY`, Master, etc.)
-5. Adicione **todos os domínios** das empresas na aba Domains do App
-
-### Render (alternativa)
-
-1. New → **Web Service** → conecte o repositório
-2. Runtime: **Docker**
-3. Health check: `/health`
-4. Use o arquivo `render.yaml` como referência
-5. Configure env vars no painel Render
-6. Custom Domains: adicione site + ERP de cada loja
-
-### Railway (alternativa)
-
-1. New Project → Deploy from GitHub
-2. Detecta `Dockerfile` automaticamente
-3. Variables: mesmas do `.env.example`
-4. Settings → Networking → Custom Domain para cada hostname
+1. Conta [Vercel](https://vercel.com) (Plano Pro recomendado — WebSockets + `maxDuration` 800s)
+2. Projeto **Supabase** (Postgres + Storage)
+3. Domínios das lojas (site + ERP)
 
 ---
 
-## Opção B — Vercel apenas como proxy (avançado)
+## Passo 1 — Supabase Storage (uploads de imagens)
 
-Use a Vercel **somente** se quiser SSL/domínios na borda apontando para um **backend já publicado** (Railway/Render/Easypanel).
+Na Vercel o disco é efêmero. Imagens vão para o **Supabase Storage**.
 
-1. Publique o backend primeiro (Opção A) e anote a URL, ex.:  
-   `https://sigma-sistema.up.railway.app`
-2. Edite `vercel.json` e substitua `BACKEND_URL` pela URL real
-3. Importe o repositório na Vercel
-4. Adicione os domínios customizados (site e ERP) no projeto Vercel
-5. DNS: CNAME dos domínios → `cname.vercel-dns.com` (ou conforme painel Vercel)
+1. Supabase → **Storage** → **New bucket**
+2. Nome: `media`
+3. Marque como **Public bucket**
+4. Policies: permitir leitura pública; escrita via service role (backend)
 
-**Limitações do proxy Vercel:**
-
-- WebSocket do ERP NiceGUI pode **falhar** ou ser instável
-- Prefira apontar DNS **direto** para o servidor Docker (Easypanel/Railway/Render)
-
-Se o ERP não abrir via Vercel, remova o proxy e use DNS A/CNAME direto para o backend.
+No Supabase → **Settings → API**, copie a **service_role key** (nunca exponha no frontend).
 
 ---
 
-## Fluxo de domínios (todas as hospedagens)
+## Passo 2 — Importar na Vercel
 
-A ordem correta está no **Painel Master → Guia de implantação** (`/master/guia`).
-
-Resumo:
-
-1. **Deploy** da app + `/health` OK
-2. **Configurações** → domínio base (ex.: `plataforma.com.br`)
-3. **Empresas** → criar loja
-4. **Domínios** → subdomínio ERP + domínio site (+ domínio ERP opcional)
-5. **DNS** → A/CNAME para o servidor
-6. **Hospedagem** → registrar cada hostname no painel (Easypanel Domains, Render Custom Domains, etc.)
-7. **Testar** ERP (`/login`) e site (`/`)
-
-O sistema identifica a empresa pelo cabeçalho HTTP `Host`. Todos os domínios devem chegar na **mesma instância** da aplicação.
+1. [vercel.com/new](https://vercel.com/new) → Import Git Repository
+2. Repo: `felipegoulart06-lab/SISTEMA-VEICULOS-SITE`
+3. Framework Preset: detecta **FastAPI** automaticamente (`main.py` → `app`)
+4. Root Directory: `/`
 
 ---
 
-## Variáveis de ambiente (produção)
+## Passo 3 — Variáveis de ambiente (Vercel → Settings → Environment Variables)
 
-```env
-AMBIENTE=production
-PORT=8080
-SECRET_KEY=chave-forte-com-32-caracteres-ou-mais
-MASTER_EMAIL=...
-MASTER_SENHA=...
-SUPABASE_DB_HOST=...
-SUPABASE_DB_USER=...
-SUPABASE_DB_PASSWORD=...
-SUPABASE_DB_NAME=postgres
-SUPABASE_DB_PORT=5432
-```
+| Variável | Obrigatório | Exemplo |
+|----------|-------------|---------|
+| `AMBIENTE` | Sim | `production` |
+| `SECRET_KEY` | Sim | chave com 32+ caracteres |
+| `MASTER_EMAIL` | Sim | `master@plataforma.com` |
+| `MASTER_SENHA` | Sim | senha forte |
+| `SUPABASE_DB_HOST` | Sim | `aws-0-....pooler.supabase.com` |
+| `SUPABASE_DB_USER` | Sim | `erp_app....` |
+| `SUPABASE_DB_PASSWORD` | Sim | senha do role |
+| `SUPABASE_DB_NAME` | Sim | `postgres` |
+| `SUPABASE_DB_PORT` | Sim | `5432` |
+| `SUPABASE_URL` | Sim | `https://xxx.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Sim | service role (uploads) |
+| `SUPABASE_STORAGE_BUCKET` | Não | `media` (padrão) |
+| `NICEGUI_REDIS_URL` | Recomendado | Upstash Redis (sessões multi-instância) |
 
 Opcional: `DATABASE_URL=postgresql+psycopg://...?sslmode=require`
+
+**Não** defina `USE_LOCAL_SQLITE` em produção.
+
+---
+
+## Passo 4 — Deploy
+
+Clique **Deploy**. A Vercel:
+
+- Instala `requirements.txt`
+- Executa `scripts/vercel_build.py` (copia CSS para `public/static`)
+- Publica `main.py` como Function FastAPI + WebSocket (NiceGUI)
+
+Teste: `https://SEU-PROJETO.vercel.app/health` → `{"status":"ok"}`
+
+---
+
+## Passo 5 — Domínios customizados
+
+Para **cada** hostname (site da loja, subdomínio ERP, domínio base):
+
+1. Vercel → Project → **Settings → Domains** → Add
+2. DNS no registrador:
+   - **CNAME** `@` ou `www` → `cname.vercel-dns.com` (conforme painel Vercel)
+   - **CNAME** `admin` ou `*.plataforma` → Vercel
+3. No **Painel Master → Domínios**, cadastre os mesmos hostnames
+4. Aguarde SSL automático (Let's Encrypt)
+
+O roteamento por empresa usa o cabeçalho `Host` — todos os domínios apontam para **o mesmo projeto Vercel**.
+
+Ordem completa: **Master → Guia de implantação** (`/master/guia`).
+
+---
+
+## Passo 6 — Redis (recomendado em produção)
+
+Com múltiplas instâncias Vercel, sessões NiceGUI precisam de storage compartilhado:
+
+1. Vercel Marketplace → **Upstash Redis**
+2. Copie a URL → `NICEGUI_REDIS_URL`
+3. Redeploy
+
+Sem Redis, usuários podem perder sessão ao alternar instâncias (cold start).
+
+---
+
+## Arquivos de configuração
+
+| Arquivo | Função |
+|---------|--------|
+| `main.py` | App FastAPI/NiceGUI exportado como `app` |
+| `vercel.json` | `maxDuration: 800` para conexões WebSocket |
+| `pyproject.toml` | Entrypoint `main:app` + build script |
+| `loja/vercel.py` | Detecta `VERCEL=1` |
+| `loja/storage_remoto.py` | Uploads → Supabase Storage |
+
+---
+
+## Desenvolvimento local (sem Vercel)
+
+```bash
+python main.py
+```
+
+Comportamento Docker/Easypanel inalterado (`ui.run()` + disco local em `dados/storage`).
+
+Simular Vercel localmente:
+
+```bash
+vercel dev
+```
+
+---
+
+## Limitações conhecidas
+
+- **Cold start**: primeira requisição pode levar 5–15 s (Postgres no Supabase + NiceGUI)
+- **WebSocket**: exige Fluid Compute (padrão em projetos novos) e Plano Pro para duração longa
+- **Uploads antigos** em `/media/` local não migram automaticamente — reenvie imagens ou migre para o bucket `media`
+- **Região Supabase**: prefira `sa-east-1` (São Paulo) para latência no Brasil
 
 ---
 
 ## Checklist pós-deploy
 
-- [ ] `GET /health` → `{"status":"ok"}`
-- [ ] `/master/login` acessível
-- [ ] Subdomínio ERP abre login
-- [ ] Domínio do site mostra estoque
-- [ ] SSL ativo (HTTPS)
-- [ ] Upload de imagens persiste após redeploy (volume montado)
-- [ ] Empresa suspensa no Master bloqueia ERP e site
+- [ ] `/health` OK
+- [ ] `/master/login` abre
+- [ ] Subdomínio ERP abre `/login`
+- [ ] Domínio do site mostra estoque (HTML)
+- [ ] Upload de imagem institucional salva no Supabase Storage
+- [ ] Domínios customizados com SSL
+- [ ] `NICEGUI_REDIS_URL` configurado (produção)

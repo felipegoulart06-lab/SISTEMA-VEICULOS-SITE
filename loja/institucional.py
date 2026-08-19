@@ -205,16 +205,20 @@ def metricas_institucionais() -> list[tuple[str, str]]:
 
 
 def salvar_upload_institucional(nome_arquivo: str, conteudo: bytes) -> str:
-    """Salva upload e devolve URL pública /media/{slug}/uploads/..."""
+    """Salva upload e devolve URL pública (/media/... ou Supabase Storage)."""
     from loja.seguranca import nome_upload_seguro, validar_upload_imagem
+    from loja.storage_remoto import salvar_bytes
 
     slug = get_tenant_slug() or conta_slug()
     if not slug:
         raise RuntimeError("Empresa não identificada para upload.")
     ext = validar_upload_imagem(nome_arquivo, conteudo)
-    pasta = pasta_storage(slug) / "uploads"
-    pasta.mkdir(parents=True, exist_ok=True)
     nome = nome_upload_seguro("institucional", ext)
-    destino = pasta / nome
-    destino.write_bytes(conteudo)
-    return f"/media/{slug}/uploads/{nome}"
+    mime = {
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "png": "image/png",
+        "webp": "image/webp",
+        "gif": "image/gif",
+    }.get(ext.lower(), "application/octet-stream")
+    return salvar_bytes(slug, "uploads", nome, conteudo, mime)

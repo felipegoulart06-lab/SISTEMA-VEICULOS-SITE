@@ -15,10 +15,9 @@ Repositório: [felipegoulart06-lab/SISTEMA-VEICULOS-SITE](https://github.com/fel
 
 | Hospedagem | Guia | Observação |
 |------------|------|------------|
-| **Easypanel / VPS** | [DEPLOY-EASYPANEL.md](DEPLOY-EASYPANEL.md) | Recomendado |
-| **Render** | [render.yaml](render.yaml) + painel Render | Docker |
-| **Railway** | Dockerfile na raiz | Docker |
-| **Vercel** | [DEPLOY-VERCEL.md](DEPLOY-VERCEL.md) | Só proxy — app roda em servidor Docker |
+| **Vercel** | [DEPLOY-VERCEL.md](DEPLOY-VERCEL.md) | **Recomendado** — site + ERP + Master |
+| **Easypanel / VPS** | [DEPLOY-EASYPANEL.md](DEPLOY-EASYPANEL.md) | Docker, volume local |
+| **Render** | [render.yaml](render.yaml) | Docker |
 
 Resumo: App com **Dockerfile**, porta **8080**, volume em `/app/dados`, variáveis do `.env.example`.
 

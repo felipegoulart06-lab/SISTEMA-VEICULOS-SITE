@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 from loja.runtime_nicegui import preparar_runtime
+from loja.vercel import em_vercel
 
 preparar_runtime()
 
@@ -42,9 +43,11 @@ from loja.whitelabel import html_favicon
 
 STATIC = Path(__file__).resolve().parent / "loja" / "static"
 STORAGE = Path(__file__).resolve().parent / "dados" / "storage"
-STORAGE.mkdir(parents=True, exist_ok=True)
+if not em_vercel():
+    STORAGE.mkdir(parents=True, exist_ok=True)
 app.add_static_files("/static", STATIC)
-app.add_static_files("/media", STORAGE)
+if not em_vercel():
+    app.add_static_files("/media", STORAGE)
 
 
 class HostContextMiddleware(BaseHTTPMiddleware):
@@ -71,7 +74,7 @@ def _log_startup() -> None:
     chave_ok = bool(chave) and chave != "sigma-erp-secret-change-in-production" and len(chave) >= 32
     postgres = usando_postgres()
     print(
-        f"[startup] AMBIENTE={ambiente} PORT={port} "
+        f"[startup] AMBIENTE={ambiente} PORT={port} vercel={em_vercel()} "
         f"postgres={postgres} SECRET_KEY={'ok' if chave_ok else 'AUSENTE/FRACA'}"
     )
     if postgres:
@@ -81,14 +84,28 @@ def _log_startup() -> None:
     else:
         print(
             "[startup] AVISO: SQLite local — defina DATABASE_URL ou SUPABASE_DB_* "
-            "no Easypanel e redeploy"
+            "no ambiente de produção"
         )
 
 
-_log_startup()
-init_db()
-aquecer_cache_dominios()
-aquecer_site_tenants()
+def _bootstrap() -> None:
+    _log_startup()
+    init_db()
+    aquecer_cache_dominios()
+    aquecer_site_tenants()
+
+
+_bootstrap_feito = False
+
+
+@app.on_startup
+def _startup() -> None:
+    global _bootstrap_feito
+    if _bootstrap_feito:
+        return
+    _bootstrap_feito = True
+    _bootstrap()
+
 
 CSS_SITE = "/static/estilo.css?v=22"
 
@@ -572,6 +589,11 @@ def rota_erp_spa(resto: str = "") -> None:
     montar_erp_spa(rota)
 
 
+from loja.vercel_setup import configurar_export_vercel, secret_key as _secret_key
+
+configurar_export_vercel()
+
+
 if __name__ in {"__main__", "__mp_main__"}:
     port = int(os.getenv("PORT", "8080"))
     ui.run(
@@ -583,9 +605,7 @@ if __name__ in {"__main__", "__mp_main__"}:
         show_welcome_message=False,
         uvicorn_logging_level="warning",
         prod_js=True,
-        storage_secret=os.getenv(
-            "SECRET_KEY", "sigma-erp-secret-change-in-production",
-        ),
+        storage_secret=_secret_key(),
         proxy_headers=True,
         forwarded_allow_ips="*",
         reconnect_timeout=30.0,

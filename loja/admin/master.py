@@ -1009,36 +1009,29 @@ def pagina_master_guia() -> None:
         "<p>Como cadastrar empresas, domínios do site e do ERP</p></div></div>"
     )
     ui.html(
-        '<div class="mst-nota mst-nota-alerta">'
-        "<strong>Hospedagem:</strong> esta aplicação (ERP + Master + sites) roda em "
-        "servidor com <strong>Docker</strong> (Easypanel, Railway, Render, Fly.io ou VPS). "
-        "A <strong>Vercel</strong> não executa Python/NiceGUI com WebSocket — use-a apenas "
-        "como proxy de DNS (opcional) ou hospede tudo no servidor. "
-        "Detalhes em <code>DEPLOY-VERCEL.md</code> no repositório."
+        '<div class="mst-nota mst-nota-ok">'
+        "<strong>Hospedagem Vercel:</strong> site + ERP + Master rodam no mesmo projeto Vercel "
+        "(FastAPI + WebSocket). Uploads usam Supabase Storage. "
+        "Guia completo: <code>DEPLOY-VERCEL.md</code> e passos abaixo."
         "</div>"
     )
 
     passos = [
         (
             "1",
-            "Publicar a aplicação no servidor",
+            "Publicar na Vercel (100% na plataforma)",
             (
-                "<p>Conecte o repositório "
-                "<code>felipegoulart06-lab/SISTEMA-VEICULOS-SITE</code> "
-                "na sua hospedagem:</p>"
-                "<ul>"
-                "<li><strong>Easypanel</strong> — App com Dockerfile, porta "
-                "<code>8080</code>, volume em <code>/app/dados</code> "
-                "(veja <code>DEPLOY-EASYPANEL.md</code>)</li>"
-                "<li><strong>Railway / Render</strong> — deploy via Dockerfile "
-                "(veja <code>render.yaml</code>)</li>"
-                "</ul>"
-                "<p>Configure as variáveis de ambiente do <code>.env.example</code>: "
-                "<code>SECRET_KEY</code>, <code>MASTER_EMAIL</code>, "
-                "<code>MASTER_SENHA</code>, credenciais <code>SUPABASE_DB_*</code>, "
-                "<code>AMBIENTE=production</code>, <code>PORT=8080</code>.</p>"
-                "<p>Teste: <code>GET https://SEU-SERVIDOR/health</code> deve retornar "
-                "<code>{\"status\":\"ok\"}</code>.</p>"
+                "<p>Importe o repositório "
+                "<code>felipegoulart06-lab/SISTEMA-VEICULOS-SITE</code> na "
+                "<a href=\"https://vercel.com/new\" target=\"_blank\" rel=\"noopener\">Vercel</a>.</p>"
+                "<p>Configure as variáveis (Supabase DB, "
+                "<code>SECRET_KEY</code>, Master, "
+                "<code>SUPABASE_SERVICE_ROLE_KEY</code> para uploads). "
+                "Detalhes em <code>DEPLOY-VERCEL.md</code>.</p>"
+                "<p>Crie o bucket <code>media</code> (público) no Supabase Storage.</p>"
+                "<p>Teste: <code>GET https://SEU-PROJETO.vercel.app/health</code></p>"
+                "<p><strong>Alternativa Docker:</strong> Easypanel/Railway — "
+                "veja <code>DEPLOY-EASYPANEL.md</code>.</p>"
             ),
         ),
         (
@@ -1125,14 +1118,10 @@ def pagina_master_guia() -> None:
                 "<p>Cada hostname que recebe tráfego HTTP/HTTPS precisa estar "
                 "cadastrado no painel do servidor:</p>"
                 "<ul>"
-                "<li><strong>Easypanel</strong> — no App, aba Domains: adicione "
-                "cada domínio (site, ERP, subdomínios). Target port: "
-                "<code>8080</code>. SSL automático.</li>"
-                "<li><strong>Railway / Render</strong> — Settings → Custom Domains: "
-                "adicione site e ERP; siga as instruções de CNAME.</li>"
-                "<li><strong>Vercel (opcional)</strong> — só como proxy reverso "
-                "para o backend (sem ERP NiceGUI direto). Veja "
-                "<code>DEPLOY-VERCEL.md</code>.</li>"
+                "<li><strong>Vercel</strong> — Settings → Domains: adicione site, ERP e "
+                "domínio base. DNS: CNAME para Vercel (SSL automático).</li>"
+                "<li><strong>Easypanel/Railway</strong> — aba Domains, porta "
+                "<code>8080</code>.</li>"
                 "</ul>"
                 "<p class=\"mst-guia-aviso\">Todos os domínios devem apontar para "
                 "<strong>uma única instância</strong> da aplicação — o roteamento "

@@ -2067,6 +2067,11 @@ body:has(.erp-login-page) .q-page {
     border-color: #fcd34d !important;
     color: #92400e !important;
 }
+.mst-nota-ok {
+    background: #ecfdf5 !important;
+    border-color: #6ee7b7 !important;
+    color: #065f46 !important;
+}
 .mst-guia {
     display: flex;
     flex-direction: column;
