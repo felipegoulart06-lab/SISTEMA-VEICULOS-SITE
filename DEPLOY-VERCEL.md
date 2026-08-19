@@ -8,7 +8,7 @@ A aplicação completa (site HTML + ERP NiceGUI + Painel Master) roda na **Verce
 
 ## Pré-requisitos
 
-1. Conta [Vercel](https://vercel.com) (Plano Pro recomendado — WebSockets + `maxDuration` 800s)
+1. Conta [Vercel](https://vercel.com) (Plano Pro recomendado — WebSockets; `maxDuration` até **300s** no Pro)
 2. Projeto **Supabase** (Postgres + Storage)
 3. Domínios das lojas (site + ERP)
 
@@ -106,7 +106,7 @@ Sem Redis, usuários podem perder sessão ao alternar instâncias (cold start).
 | Arquivo | Função |
 |---------|--------|
 | `main.py` | App FastAPI/NiceGUI exportado como `app` |
-| `vercel.json` | `maxDuration: 800` para conexões WebSocket |
+| `vercel.json` | `maxDuration: 300` (máximo do plano Pro) |
 | `pyproject.toml` | Entrypoint `main:app` + build script |
 | `loja/vercel.py` | Detecta `VERCEL=1` |
 | `loja/storage_remoto.py` | Uploads → Supabase Storage |
