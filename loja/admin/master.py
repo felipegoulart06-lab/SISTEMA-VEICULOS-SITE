@@ -54,6 +54,7 @@ MENU_MASTER = [
     ("Empresas", "/master/empresas", "storefront"),
     ("Planos", "/master/planos", "credit_card"),
     ("Domínios", "/master/dominios", "language"),
+    ("Guia de implantação", "/master/guia", "menu_book"),
     ("Logs", "/master/logs", "receipt_long"),
     ("Configurações", "/master/configuracoes", "settings"),
 ]
@@ -112,7 +113,7 @@ def _css_master() -> None:
         '<link rel="stylesheet" href="https://fonts.googleapis.com/icon'
         '?family=Material+Icons">'
     )
-    ui.add_head_html('<link rel="stylesheet" href="/static/admin.css?v=27">')
+    ui.add_head_html('<link rel="stylesheet" href="/static/admin.css?v=28">')
     ui.add_head_html(
         "<style>:root { --erp-accent: #1e3a5f; --erp-accent-hover: #16304f; "
         "--erp-accent-soft: rgba(30,58,95,0.12); }</style>"
@@ -289,7 +290,10 @@ def pagina_master_dashboard() -> None:
     stats = estatisticas_plataforma()
     ui.html(
         '<div class="erp-page-header"><div><h2>Dashboard</h2>'
-        "<p>Visão geral das empresas</p></div></div>"
+        "<p>Visão geral das empresas</p></div>"
+        '<div><a href="/master/guia" class="mst-link-guia">'
+        '<span class="material-icons">menu_book</span> Guia de implantação'
+        "</a></div></div>"
     )
 
     cartoes = [
@@ -894,12 +898,18 @@ def pagina_master_dominios() -> None:
     ui.html(
         '<div class="erp-page-header"><div><h2>Domínios</h2>'
         "<p>Somente o Administrador Master pode editar domínios</p>"
-        "</div></div>"
+        "</div>"
+        '<div><a href="/master/guia" class="mst-link-guia">'
+        '<span class="material-icons">menu_book</span> Ver passo a passo completo'
+        "</a></div></div>"
     )
     ui.html(
         '<div class="mst-nota">O ERP de cada loja abre no <strong>subdomínio</strong> '
-        "cadastrado aqui. O site público fica no <strong>domínio próprio</strong> "
-        "da empresa. DNS e SSL são configurados no provedor.</div>"
+        "ou no <strong>domínio ERP</strong> cadastrado aqui. O site público fica no "
+        "<strong>domínio próprio</strong> da empresa. DNS e SSL são configurados no "
+        "provedor e na hospedagem (Easypanel, Railway, Render, etc.). "
+        'Consulte <a href="/master/guia">Guia de implantação</a> para a ordem correta '
+        "dos passos.</div>"
     )
 
     @ui.refreshable
@@ -912,12 +922,15 @@ def pagina_master_dominios() -> None:
             ui.html(
                 '<div class="mst-tabela-head mst-head-dom">'
                 "<span>Empresa</span><span>Subdomínio (ERP)</span>"
-                "<span>Domínio do site</span><span>Ações</span></div>"
+                "<span>Domínio ERP</span><span>Domínio do site</span>"
+                "<span>Ações</span></div>"
             )
             for c in contas:
                 with ui.element("div").classes("mst-tabela-row mst-head-dom"):
                     ui.html(f"<span><strong>{c.nome}</strong></span>")
                     ui.html(f"<span>{c.subdominio or '—'}</span>")
+                    erp_dom = c.dominio_erp if c.dominio_erp and c.dominio_erp != c.subdominio else "—"
+                    ui.html(f"<span>{erp_dom}</span>")
                     ui.html(f"<span>{c.dominio_site or '—'}</span>")
                     with ui.element("span").classes("mst-acoes"):
                         ui.button(
@@ -948,12 +961,19 @@ def _dialog_dominios(conta_id: int, refresh) -> None:
     with ui.dialog() as dlg, ui.card().classes("erp-dialog mst-dialog"):
         ui.html(f"<h3>Domínios de {conta.nome}</h3>")
         ui.html(
-            '<p class="erp-ajuda">A loja acessa o ERP digitando o subdomínio no '
-            "navegador. O site público usa o domínio próprio abaixo.</p>"
+            '<p class="erp-ajuda">Subdomínio na plataforma (ex.: '
+            "<code>loja.dominio-base</code>) ou domínio ERP próprio "
+            "(ex.: <code>admin.loja.com.br</code>). O site público usa o "
+            "domínio próprio abaixo. Veja o "
+            '<a href="/master/guia" target="_blank">Guia de implantação</a>.</p>'
         )
         sub = ui.input(
-            "Subdomínio (acesso ERP)", value=conta.subdominio,
+            "Subdomínio (ERP na plataforma)", value=conta.subdominio,
             placeholder="minha-loja.plataforma.com.br",
+        ).classes("erp-input-full")
+        erp = ui.input(
+            "Domínio ERP (opcional)", value=conta.dominio_erp or conta.subdominio,
+            placeholder="admin.minha-loja.com.br",
         ).classes("erp-input-full")
         site = ui.input(
             "Domínio do site", value=conta.dominio_site,
@@ -962,7 +982,10 @@ def _dialog_dominios(conta_id: int, refresh) -> None:
 
         def salvar() -> None:
             atualizar_dominios(
-                conta_id, sub.value or "", site.value or "",
+                conta_id,
+                sub.value or "",
+                site.value or "",
+                erp.value or sub.value or "",
             )
             dlg.close()
             ui.notify("Domínios atualizados.", type="positive")
@@ -974,6 +997,209 @@ def _dialog_dominios(conta_id: int, refresh) -> None:
                 "erp-btn-primario"
             ).props("unelevated no-caps")
     dlg.open()
+
+
+# -------------------------------------------------------- Guia de implantação
+
+def pagina_master_guia() -> None:
+    cfg = obter_config_plataforma()
+    base = cfg.dominio_base or "plataforma.com.br"
+    ui.html(
+        '<div class="erp-page-header"><div><h2>Guia de implantação</h2>'
+        "<p>Como cadastrar empresas, domínios do site e do ERP</p></div></div>"
+    )
+    ui.html(
+        '<div class="mst-nota mst-nota-alerta">'
+        "<strong>Hospedagem:</strong> esta aplicação (ERP + Master + sites) roda em "
+        "servidor com <strong>Docker</strong> (Easypanel, Railway, Render, Fly.io ou VPS). "
+        "A <strong>Vercel</strong> não executa Python/NiceGUI com WebSocket — use-a apenas "
+        "como proxy de DNS (opcional) ou hospede tudo no servidor. "
+        "Detalhes em <code>DEPLOY-VERCEL.md</code> no repositório."
+        "</div>"
+    )
+
+    passos = [
+        (
+            "1",
+            "Publicar a aplicação no servidor",
+            (
+                "<p>Conecte o repositório "
+                "<code>felipegoulart06-lab/SISTEMA-VEICULOS-SITE</code> "
+                "na sua hospedagem:</p>"
+                "<ul>"
+                "<li><strong>Easypanel</strong> — App com Dockerfile, porta "
+                "<code>8080</code>, volume em <code>/app/dados</code> "
+                "(veja <code>DEPLOY-EASYPANEL.md</code>)</li>"
+                "<li><strong>Railway / Render</strong> — deploy via Dockerfile "
+                "(veja <code>render.yaml</code>)</li>"
+                "</ul>"
+                "<p>Configure as variáveis de ambiente do <code>.env.example</code>: "
+                "<code>SECRET_KEY</code>, <code>MASTER_EMAIL</code>, "
+                "<code>MASTER_SENHA</code>, credenciais <code>SUPABASE_DB_*</code>, "
+                "<code>AMBIENTE=production</code>, <code>PORT=8080</code>.</p>"
+                "<p>Teste: <code>GET https://SEU-SERVIDOR/health</code> deve retornar "
+                "<code>{\"status\":\"ok\"}</code>.</p>"
+            ),
+        ),
+        (
+            "2",
+            "Definir o domínio base da plataforma",
+            (
+                f"<p>Em <strong>Configurações</strong>, defina "
+                f"<strong>Domínio base dos subdomínios</strong> como "
+                f"<code>{base}</code> (ou o domínio que você controla, "
+                "ex.: <code>minhaplataforma.com.br</code>).</p>"
+                "<p>Novas empresas recebem ERP em "
+                f"<code>identificador.{base}</code> automaticamente.</p>"
+                "<p>No DNS do domínio base, crie um registro curinga "
+                f"<code>*. {base}</code> apontando para o IP do servidor "
+                "(tipo A) ou CNAME para o host da hospedagem.</p>"
+            ),
+        ),
+        (
+            "3",
+            "Criar a empresa de veículos",
+            (
+                "<p>Menu <strong>Empresas</strong> → <strong>Criar empresa</strong>:</p>"
+                "<ol>"
+                "<li>Nome da empresa e e-mail do administrador (login do ERP)</li>"
+                "<li>Identificador (slug) — ex.: <code>rodavia</code></li>"
+                "<li>Plano, status e dias de licença</li>"
+                "<li>Cor do tema e senha temporária (mín. 8 caracteres)</li>"
+                "</ol>"
+                "<p>O sistema cria automaticamente: schema isolado no banco, ERP vazio, "
+                "site público limpo e subdomínio ERP padrão.</p>"
+                "<p><strong>Anote</strong> e-mail, senha temporária e subdomínio exibidos "
+                "após a criação — o admin precisará trocar a senha no primeiro acesso.</p>"
+            ),
+        ),
+        (
+            "4",
+            "Cadastrar domínios no Master",
+            (
+                "<p>Menu <strong>Domínios</strong> → <strong>Editar domínios</strong> "
+                "da empresa:</p>"
+                "<table class=\"mst-guia-tabela\">"
+                "<thead><tr><th>Campo</th><th>Exemplo</th><th>Uso</th></tr></thead>"
+                "<tbody>"
+                f"<tr><td>Subdomínio (ERP)</td><td><code>rodavia.{base}</code></td>"
+                "<td>ERP na plataforma — login em <code>/login</code></td></tr>"
+                "<tr><td>Domínio ERP (opcional)</td>"
+                "<td><code>admin.rodavia.com.br</code></td>"
+                "<td>ERP com domínio próprio da loja (substitui ou complementa "
+                "o subdomínio)</td></tr>"
+                "<tr><td>Domínio do site</td>"
+                "<td><code>www.rodavia.com.br</code> ou <code>rodavia.com.br</code></td>"
+                "<td>Site público de veículos (HTML rápido, sem WebSocket)</td></tr>"
+                "</tbody></table>"
+                "<p>Salvar aqui <strong>não configura DNS</strong> — apenas informa ao "
+                "sistema qual host pertence a qual empresa.</p>"
+            ),
+        ),
+        (
+            "5",
+            "Configurar DNS (Registro.br, Cloudflare, etc.)",
+            (
+                "<p>No painel do registrador, crie os registros apontando para o "
+                "<strong>mesmo servidor</strong> onde a aplicação está publicada:</p>"
+                "<table class=\"mst-guia-tabela\">"
+                "<thead><tr><th>Host</th><th>Tipo</th><th>Destino</th></tr></thead>"
+                "<tbody>"
+                f"<tr><td><code>*. {base}</code></td><td>A ou CNAME</td>"
+                "<td>IP ou hostname do servidor</td></tr>"
+                "<tr><td><code>rodavia.com.br</code></td><td>A ou CNAME</td>"
+                "<td>IP ou hostname do servidor</td></tr>"
+                "<tr><td><code>www</code></td><td>CNAME</td>"
+                "<td><code>rodavia.com.br</code> (opcional)</td></tr>"
+                "<tr><td><code>admin</code></td><td>A ou CNAME</td>"
+                "<td>IP ou hostname (se usar domínio ERP próprio)</td></tr>"
+                "</tbody></table>"
+                "<p>Propagação: de minutos a 48 h. Use "
+                "<code>https://dnschecker.org</code> para verificar.</p>"
+            ),
+        ),
+        (
+            "6",
+            "Registrar domínios na hospedagem",
+            (
+                "<p>Cada hostname que recebe tráfego HTTP/HTTPS precisa estar "
+                "cadastrado no painel do servidor:</p>"
+                "<ul>"
+                "<li><strong>Easypanel</strong> — no App, aba Domains: adicione "
+                "cada domínio (site, ERP, subdomínios). Target port: "
+                "<code>8080</code>. SSL automático.</li>"
+                "<li><strong>Railway / Render</strong> — Settings → Custom Domains: "
+                "adicione site e ERP; siga as instruções de CNAME.</li>"
+                "<li><strong>Vercel (opcional)</strong> — só como proxy reverso "
+                "para o backend (sem ERP NiceGUI direto). Veja "
+                "<code>DEPLOY-VERCEL.md</code>.</li>"
+                "</ul>"
+                "<p class=\"mst-guia-aviso\">Todos os domínios devem apontar para "
+                "<strong>uma única instância</strong> da aplicação — o roteamento "
+                "por empresa é feito pelo cabeçalho <code>Host</code>.</p>"
+            ),
+        ),
+        (
+            "7",
+            "Testar acesso",
+            (
+                "<ul class=\"mst-guia-checklist\">"
+                f"<li>ERP subdomínio: <code>https://empresa.{base}/login</code></li>"
+                "<li>ERP domínio próprio: <code>https://admin.loja.com.br/login</code></li>"
+                "<li>Site: <code>https://www.loja.com.br/</code> (estoque, contato)</li>"
+                "<li>Desenvolvimento local: <code>/loja/{slug}/</code> e "
+                "<code>/admin/login</code></li>"
+                "<li>Master: <code>/master/login</code> (localhost ou domínio admin "
+                "da plataforma)</li>"
+                "</ul>"
+                "<p>Empresa <strong>suspensa</strong> no Master bloqueia ERP e site "
+                "imediatamente (página de conta indisponível).</p>"
+            ),
+        ),
+        (
+            "8",
+            "Ordem correta (checklist)",
+            (
+                "<ol class=\"mst-guia-ordem\">"
+                "<li>Deploy da aplicação + variáveis + <code>/health</code> OK</li>"
+                "<li>Domínio base em Configurações + DNS curinga <code>*</code></li>"
+                "<li>Criar empresa em Empresas</li>"
+                "<li>Editar domínios em Domínios (site + ERP)</li>"
+                "<li>DNS dos domínios da loja (A/CNAME)</li>"
+                "<li>Adicionar domínios no Easypanel/Railway/Render</li>"
+                "<li>Aguardar SSL e testar login ERP + site público</li>"
+                "<li>Entregar credenciais ao cliente (e-mail + senha temp.)</li>"
+                "</ol>"
+            ),
+        ),
+    ]
+
+    with ui.element("div").classes("mst-guia"):
+        for num, titulo, html in passos:
+            with ui.element("section").classes("mst-guia-passo"):
+                ui.html(
+                    f'<div class="mst-guia-num">{num}</div>'
+                    f"<div class=\"mst-guia-corpo\">"
+                    f"<h3>{titulo}</h3>{html}</div>"
+                )
+
+    contas = listar_contas()
+    if contas:
+        linhas = "".join(
+            f"<tr><td>{c.nome}</td><td><code>{c.subdominio or '—'}</code></td>"
+            f"<td><code>{c.dominio_erp or '—'}</code></td>"
+            f"<td><code>{c.dominio_site or '—'}</code></td>"
+            f"<td>{_pill_status(c.status)}</td></tr>"
+            for c in contas
+        )
+        ui.html(
+            '<section class="mst-guia-painel">'
+            "<h3>Empresas cadastradas — referência rápida</h3>"
+            '<table class="mst-guia-tabela">'
+            "<thead><tr><th>Empresa</th><th>Subdomínio ERP</th>"
+            "<th>Domínio ERP</th><th>Site</th><th>Status</th></tr></thead>"
+            f"<tbody>{linhas}</tbody></table></section>"
+        )
 
 
 # ----------------------------------------------------------------- Logs

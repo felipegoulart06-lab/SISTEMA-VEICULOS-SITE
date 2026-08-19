@@ -1,0 +1,15 @@
+# Render.com — deploy via Dockerfile
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: sistema-veiculos-site
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: AMBIENTE
+        value: production
+      # Configure no painel Render (nunca commite secrets):
+      # SECRET_KEY, MASTER_EMAIL, MASTER_SENHA, SUPABASE_DB_*

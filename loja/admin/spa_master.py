@@ -14,6 +14,7 @@ from loja.admin.master import (
     pagina_master_dashboard,
     pagina_master_dominios,
     pagina_master_empresas,
+    pagina_master_guia,
     pagina_master_logs,
     pagina_master_planos,
 )
@@ -25,6 +26,7 @@ ROTAS_MASTER: dict[str, Callable] = {
     "/master/empresas": pagina_master_empresas,
     "/master/planos": pagina_master_planos,
     "/master/dominios": pagina_master_dominios,
+    "/master/guia": pagina_master_guia,
     "/master/logs": pagina_master_logs,
     "/master/configuracoes": pagina_master_config,
 }

@@ -1767,8 +1767,8 @@ body:has(.erp-login-page) .q-page {
 
 /* ====== Domínios, provisionamento e páginas institucionais ====== */
 .mst-head-dom {
-    grid-template-columns: 1.4fr 1.8fr 1.4fr 1.6fr;
-    min-width: 720px;
+    grid-template-columns: 1.2fr 1.4fr 1.4fr 1.4fr 1.4fr;
+    min-width: 860px;
 }
 .mst-nota {
     background: #eff6ff;
@@ -1861,8 +1861,8 @@ body:has(.erp-login-page) .q-page {
 }
 
 .mst-head-dom {
-    grid-template-columns: 1.4fr 1.8fr 1.4fr 1.6fr !important;
-    min-width: 720px;
+    grid-template-columns: 1.2fr 1.4fr 1.4fr 1.4fr 1.4fr !important;
+    min-width: 860px;
 }
 
 .mst-empresa {
@@ -2046,3 +2046,116 @@ body:has(.erp-login-page) .q-page {
 @media (min-width: 901px) {
     .erp-sidebar-backdrop { display: none !important; }
 }
+
+/* ====== Guia de implantação (Master) ====== */
+.mst-link-guia {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--erp-accent);
+    text-decoration: none;
+    padding: 8px 12px;
+    border: 1px solid var(--erp-accent-soft, rgba(30,58,95,0.2));
+    border-radius: 8px;
+    background: #fff;
+}
+.mst-link-guia:hover { background: #f8fafc; }
+.mst-nota-alerta {
+    background: #fffbeb !important;
+    border-color: #fcd34d !important;
+    color: #92400e !important;
+}
+.mst-guia {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 8px;
+}
+.mst-guia-passo {
+    display: flex;
+    gap: 14px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px 18px;
+}
+.mst-guia-num {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--erp-accent);
+    color: #fff;
+    font-weight: 800;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.mst-guia-corpo { flex: 1; min-width: 0; }
+.mst-guia-corpo h3 {
+    margin: 0 0 8px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #111827;
+}
+.mst-guia-corpo p,
+.mst-guia-corpo li {
+    font-size: 13px;
+    line-height: 1.55;
+    color: #374151;
+}
+.mst-guia-corpo ul,
+.mst-guia-corpo ol {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+.mst-guia-corpo code {
+    background: #f3f4f6;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+.mst-guia-tabela {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin: 10px 0;
+}
+.mst-guia-tabela th,
+.mst-guia-tabela td {
+    border: 1px solid #e5e7eb;
+    padding: 8px 10px;
+    text-align: left;
+}
+.mst-guia-tabela th {
+    background: #f9fafb;
+    font-weight: 600;
+}
+.mst-guia-checklist,
+.mst-guia-ordem {
+    margin: 8px 0;
+    padding-left: 22px;
+}
+.mst-guia-aviso {
+    background: #fef2f2;
+    border-left: 3px solid #ef4444;
+    padding: 8px 12px;
+    border-radius: 0 6px 6px 0;
+    margin-top: 10px !important;
+}
+.mst-guia-painel {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-top: 8px;
+}
+.mst-guia-painel h3 {
+    margin: 0 0 12px;
+    font-size: 15px;
+    font-weight: 700;
+}
+.mst-nota a { color: inherit; font-weight: 700; }

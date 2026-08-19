@@ -1,8 +1,8 @@
 # Deploy no Easypanel (GitHub)
 
-Guia para publicar o **sigma-sistema** como App no [Easypanel](https://easypanel.io), usando o repositório GitHub e Supabase como banco.
+Guia para publicar o sistema como App no [Easypanel](https://easypanel.io), usando o repositório GitHub e Supabase como banco.
 
-Repositório: `goulartfelipe618-beep/sigma-sistema`
+Repositório: [`felipegoulart06-lab/SISTEMA-VEICULOS-SITE`](https://github.com/felipegoulart06-lab/SISTEMA-VEICULOS-SITE)
 
 ---
 
@@ -30,7 +30,7 @@ Aba **Source**:
 | Campo | Valor |
 |-------|--------|
 | Source | GitHub |
-| Owner / Repo | `goulartfelipe618-beep/sigma-sistema` |
+| Owner / Repo | `felipegoulart06-lab/SISTEMA-VEICULOS-SITE` |
 | Branch | `main` |
 | Build Path | `/` |
 
