@@ -39,10 +39,10 @@ if TYPE_CHECKING:
 
 load_dotenv()
 
-DADOS_DIR = Path(__file__).resolve().parent.parent / "dados"
+from loja.paths import dir_dados
+
+DADOS_DIR = dir_dados()
 CONTAS_DIR = DADOS_DIR / "contas"
-DADOS_DIR.mkdir(exist_ok=True)
-CONTAS_DIR.mkdir(exist_ok=True)
 
 _pg_engine = None
 

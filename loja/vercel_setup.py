@@ -21,7 +21,8 @@ def configurar_export_vercel() -> None:
     """Prepara storage e config do NiceGUI quando `app` é exportado para a Vercel."""
     if not em_vercel():
         return
-    core.app.config.add_run_config(
+    try:
+        core.app.config.add_run_config(
         reload=False,
         title="Gestão Veículos",
         viewport="width=device-width, initial-scale=1",

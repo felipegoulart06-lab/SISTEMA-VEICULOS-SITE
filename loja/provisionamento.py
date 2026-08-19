@@ -33,7 +33,9 @@ from loja.models import (
     Usuario,
 )
 
-STORAGE_DIR = Path(__file__).resolve().parent.parent / "dados" / "storage"
+from loja.paths import dir_storage
+
+STORAGE_DIR = dir_storage()
 PASTAS_STORAGE = (
     "veiculos", "documentos", "logos", "uploads", "backups", "temp",
 )

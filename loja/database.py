@@ -29,8 +29,9 @@ from loja.models import (
 
 load_dotenv()
 
-DADOS_DIR = Path(__file__).resolve().parent.parent / "dados"
-DADOS_DIR.mkdir(exist_ok=True)
+from loja.paths import dir_dados
+
+DADOS_DIR = dir_dados()
 DATABASE_URL = f"sqlite:///{DADOS_DIR / 'loja.db'}"
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})

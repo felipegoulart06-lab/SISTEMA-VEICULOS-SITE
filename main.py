@@ -2,12 +2,14 @@ import os
 from pathlib import Path
 
 from loja.runtime_nicegui import preparar_runtime
+from loja.paths import dir_storage
 from loja.vercel import em_vercel
 
 preparar_runtime()
 
 from nicegui import app, ui
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from loja.admin.login import pagina_login
 from loja.admin.trocar_senha import pagina_trocar_senha
@@ -42,9 +44,7 @@ from loja.tenant_ctx import ligar_tenant, site_url
 from loja.whitelabel import html_favicon
 
 STATIC = Path(__file__).resolve().parent / "loja" / "static"
-STORAGE = Path(__file__).resolve().parent / "dados" / "storage"
-if not em_vercel():
-    STORAGE.mkdir(parents=True, exist_ok=True)
+STORAGE = dir_storage()
 app.add_static_files("/static", STATIC)
 if not em_vercel():
     app.add_static_files("/media", STORAGE)
@@ -62,7 +62,44 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(SiteHtmlMiddleware)
 app.add_middleware(HostContextMiddleware)
 
-validar_ambiente()
+_startup_erro: str | None = None
+
+
+def _bootstrap() -> None:
+    validar_ambiente()
+    _log_startup()
+    init_db()
+    aquecer_cache_dominios()
+    aquecer_site_tenants()
+
+
+_bootstrap_feito = False
+
+
+@app.on_startup
+def _startup() -> None:
+    global _bootstrap_feito, _startup_erro
+    if _bootstrap_feito:
+        return
+    _bootstrap_feito = True
+    try:
+        _bootstrap()
+    except Exception as err:
+        _startup_erro = str(err)
+        print(f"[startup] ERRO: {err}")
+
+
+CSS_SITE = "/static/estilo.css?v=22"
+
+
+@app.get("/health")
+def health_check():
+    if _startup_erro:
+        return JSONResponse(
+            {"status": "error", "detail": _startup_erro},
+            status_code=503,
+        )
+    return {"status": "ok"}
 
 
 def _log_startup() -> None:
@@ -86,33 +123,6 @@ def _log_startup() -> None:
             "[startup] AVISO: SQLite local — defina DATABASE_URL ou SUPABASE_DB_* "
             "no ambiente de produção"
         )
-
-
-def _bootstrap() -> None:
-    _log_startup()
-    init_db()
-    aquecer_cache_dominios()
-    aquecer_site_tenants()
-
-
-_bootstrap_feito = False
-
-
-@app.on_startup
-def _startup() -> None:
-    global _bootstrap_feito
-    if _bootstrap_feito:
-        return
-    _bootstrap_feito = True
-    _bootstrap()
-
-
-CSS_SITE = "/static/estilo.css?v=22"
-
-
-@app.get("/health")
-def health_check() -> dict[str, str]:
-    return {"status": "ok"}
 
 
 def ativar_loja(slug: str) -> bool:
