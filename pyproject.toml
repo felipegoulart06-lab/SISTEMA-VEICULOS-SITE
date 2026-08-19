@@ -2,7 +2,18 @@
 name = "sistema-veiculos-site"
 version = "1.0.0"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "nicegui>=3.15.0,<4.0.0",
+    "jinja2>=3.1.0",
+    "sqlalchemy>=2.0.0",
+    "passlib>=1.7.4",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.27.0",
+    "psycopg[binary]>=3.1.0",
+    "pyotp>=2.9.0",
+    "uvicorn[standard]>=0.30.0",
+    "websockets>=12.0",
+]
 
 [tool.vercel]
 entrypoint = "main:app"
