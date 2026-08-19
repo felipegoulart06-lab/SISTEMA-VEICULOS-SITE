@@ -45,8 +45,9 @@ from loja.whitelabel import html_favicon
 
 STATIC = Path(__file__).resolve().parent / "loja" / "static"
 STORAGE = dir_storage()
-app.add_static_files("/static", STATIC)
-if not em_vercel():
+if STATIC.is_dir():
+    app.add_static_files("/static", STATIC)
+if not em_vercel() and STORAGE.is_dir():
     app.add_static_files("/media", STORAGE)
 
 
